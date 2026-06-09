@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sunkencosts/mirror-me/internal/provider"
+	"github.com/sunkencosts/mirrorleague/internal/provider"
 )
 
 const IconURL = "https://sleepercdn.com/images/sleeperbot_icon_sm.png"

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/sunkencosts/mirror-me/internal/provider"
+	"github.com/sunkencosts/mirrorleague/internal/provider"
 )
 
 func FetchPlayers(ctx context.Context, baseURL string) (map[string]provider.Player, error) {

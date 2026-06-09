@@ -9,8 +9,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/sunkencosts/mirror-me/internal/provider"
-	"github.com/sunkencosts/mirror-me/internal/sleeper"
+	"github.com/sunkencosts/mirrorleague/internal/provider"
+	"github.com/sunkencosts/mirrorleague/internal/sleeper"
 )
 
 type playerSyncer interface {

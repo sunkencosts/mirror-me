@@ -1,4 +1,4 @@
-module github.com/sunkencosts/mirror-me
+module github.com/sunkencosts/mirrorleague
 
 go 1.25.1
 

@@ -1,4 +1,4 @@
-# mirror-me
+# mirrorleague
 
 Fantasy football mirror app — import a celebrity's Sleeper team and prove you manage it better.
 

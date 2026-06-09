@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/sunkencosts/mirror-me/internal/db"
-	"github.com/sunkencosts/mirror-me/internal/googleauth"
-	"github.com/sunkencosts/mirror-me/internal/handlers"
-	"github.com/sunkencosts/mirror-me/internal/provider"
-	"github.com/sunkencosts/mirror-me/pkg/config"
+	"github.com/sunkencosts/mirrorleague/internal/db"
+	"github.com/sunkencosts/mirrorleague/internal/googleauth"
+	"github.com/sunkencosts/mirrorleague/internal/handlers"
+	"github.com/sunkencosts/mirrorleague/internal/provider"
+	"github.com/sunkencosts/mirrorleague/pkg/config"
 )
 
 type sleeperDeps interface {

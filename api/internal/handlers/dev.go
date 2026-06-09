@@ -3,7 +3,7 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/sunkencosts/mirror-me/internal/jwtauth"
+	"github.com/sunkencosts/mirrorleague/internal/jwtauth"
 )
 
 const devUserID = "00000000-0000-0000-0000-000000000001"

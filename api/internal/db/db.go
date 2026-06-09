@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/sunkencosts/mirror-me/internal/provider"
+	"github.com/sunkencosts/mirrorleague/internal/provider"
 )
 
 type scanner interface {

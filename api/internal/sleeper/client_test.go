@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/sunkencosts/mirror-me/internal/provider"
+	"github.com/sunkencosts/mirrorleague/internal/provider"
 )
 
 type mapPlayerLookup struct {

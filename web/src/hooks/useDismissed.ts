@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 function storageKey(leagueId: string) {
-	return `mirror-me:dismissed:${leagueId}`;
+	return `mirrorleague:dismissed:${leagueId}`;
 }
 
 function readFromStorage(leagueId: string): number[] {

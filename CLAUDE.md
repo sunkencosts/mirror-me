@@ -1,4 +1,4 @@
-# mirror-me
+# mirrorleague
 
 ## Project Overview
 A fantasy football "mirror" app where users can import a celebrity or public figure's Sleeper fantasy football team and set their own lineup using the same roster — then compare scores to prove they're a better fantasy manager.

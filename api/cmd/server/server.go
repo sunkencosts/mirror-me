@@ -17,11 +17,11 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/sunkencosts/mirror-me/internal/db"
-	"github.com/sunkencosts/mirror-me/internal/googleauth"
-	"github.com/sunkencosts/mirror-me/internal/sleeper"
-	"github.com/sunkencosts/mirror-me/pkg/config"
-	"github.com/sunkencosts/mirror-me/pkg/logger"
+	"github.com/sunkencosts/mirrorleague/internal/db"
+	"github.com/sunkencosts/mirrorleague/internal/googleauth"
+	"github.com/sunkencosts/mirrorleague/internal/sleeper"
+	"github.com/sunkencosts/mirrorleague/pkg/config"
+	"github.com/sunkencosts/mirrorleague/pkg/logger"
 )
 
 func run(ctx context.Context, getenv func(string) string, stdout, stderr io.Writer) error {

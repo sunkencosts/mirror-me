@@ -8,8 +8,8 @@ import (
 	mrand "math/rand/v2"
 	"net/http"
 
-	"github.com/sunkencosts/mirror-me/internal/jwtauth"
-	"github.com/sunkencosts/mirror-me/internal/provider"
+	"github.com/sunkencosts/mirrorleague/internal/jwtauth"
+	"github.com/sunkencosts/mirrorleague/internal/provider"
 )
 
 const oauthStateCookie = "oauth_state"

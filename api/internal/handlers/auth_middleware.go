@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/sunkencosts/mirror-me/internal/jwtauth"
+	"github.com/sunkencosts/mirrorleague/internal/jwtauth"
 )
 
 type contextKey string

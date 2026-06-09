@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SESSION="mirror-me"
+SESSION="mirrorleague"
 ROOT=$(cd "$(dirname "$0")" && pwd)
 
 tmux has-session -t $SESSION 2>/dev/null && tmux kill-session -t $SESSION

@@ -6,8 +6,8 @@ import (
 	"net/http"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/sunkencosts/mirror-me/internal/provider"
-	"github.com/sunkencosts/mirror-me/internal/sleeper"
+	"github.com/sunkencosts/mirrorleague/internal/provider"
+	"github.com/sunkencosts/mirrorleague/internal/sleeper"
 )
 
 type userLeagueStore interface {

@@ -133,7 +133,7 @@ Should return `200`.
 ## Phase 3 — Cloudflare Pages (TODO)
 
 1. Go to **Cloudflare Dashboard → Pages → Create project → Connect to GitHub**
-2. Select the `mirror-me` repo
+2. Select the `mirrorleague` repo
 3. Build settings:
    - **Framework preset:** None
    - **Build command:** `cd web && npm ci && npm run build`

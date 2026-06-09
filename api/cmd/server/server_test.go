@@ -21,9 +21,9 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/sunkencosts/mirror-me/internal/db"
-	"github.com/sunkencosts/mirror-me/internal/jwtauth"
-	"github.com/sunkencosts/mirror-me/internal/provider"
+	"github.com/sunkencosts/mirrorleague/internal/db"
+	"github.com/sunkencosts/mirrorleague/internal/jwtauth"
+	"github.com/sunkencosts/mirrorleague/internal/provider"
 )
 
 const testDatabaseURL = "postgres://mirrorleague:mirrorleague@localhost:5433/mirrorleague_test"

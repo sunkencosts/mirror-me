@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/sunkencosts/mirror-me/internal/provider"
+	"github.com/sunkencosts/mirrorleague/internal/provider"
 )
 
 const (

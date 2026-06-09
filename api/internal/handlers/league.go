@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/sunkencosts/mirror-me/internal/provider"
+	"github.com/sunkencosts/mirrorleague/internal/provider"
 )
 
 type leagueProvider interface {

@@ -9,7 +9,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/sunkencosts/mirror-me/pkg/config"
+	"github.com/sunkencosts/mirrorleague/pkg/config"
 )
 
 func main() {
