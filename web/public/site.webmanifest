@@ -1,0 +1,16 @@
+{
+	"name": "Mirror League",
+	"short_name": "Mirror League",
+	"description": "Mirror any public Sleeper fantasy football roster and prove you'd manage it better.",
+	"start_url": "/",
+	"display": "standalone",
+	"background_color": "#080d08",
+	"theme_color": "#080d08",
+	"icons": [
+		{
+			"src": "/favicon.svg",
+			"sizes": "any",
+			"type": "image/svg+xml"
+		}
+	]
+}

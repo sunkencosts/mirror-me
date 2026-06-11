@@ -1,6 +1,5 @@
 # Next
 # FE
-- sleeper doesn't provide historical data for taxi and IR. So make sure testing and app in general doesn't revolve around that.
 -
 - Use sleeper historical data to test.
 - figure out a better way to rank teams
@@ -11,5 +10,8 @@
 
 # Database
 
-# Bugs
-- Bad league ID is not handled on "Connect league"
+# Images needed
+- OG/social share image (1200x630 PNG/JPG) — referenced by og:image / twitter:image in web/index.html, not yet added
+- favicon.ico (legacy browsers, currently only have favicon.svg)
+- apple-touch-icon.png (180x180) for iOS home screen
+- PNG icons for site.webmanifest (192x192, 512x512) for Android/PWA install

@@ -41,12 +41,16 @@ export default function LeaguePage() {
 		throwOnError: true,
 	});
 
-	const { data: weekMatchups = [] } = useQuery<WeekMatchup[]>({
+	const {
+		data: weekMatchups = [],
+		isLoading: weekMatchupsLoading,
+	} = useQuery<WeekMatchup[]>({
 		queryKey: ["week-matchups", leagueId, weekNumber],
 		queryFn: () => fetchJson(`/league/${leagueId}/week/${weekNumber}`),
 		select: (data) => data ?? [],
 		placeholderData: keepPreviousData,
 		enabled: !!leagueId,
+		retry: false,
 	});
 
 	const matchupByRosterId = useMemo(
@@ -134,7 +138,7 @@ export default function LeaguePage() {
 		);
 	}
 
-	if (leagueLoading || rostersLoading) {
+	if (leagueLoading || rostersLoading || weekMatchupsLoading) {
 		return <p>Loading…</p>;
 	}
 	if (!leagueConfig || !league) {
