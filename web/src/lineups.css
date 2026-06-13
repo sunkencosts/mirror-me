@@ -794,34 +794,15 @@
 	}
 	.input input {
 		width: 110px;
+		font-size: 16px;
 	}
 
-	/* override popover becomes a bottom sheet */
-	.pop {
-		position: fixed;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		top: auto;
-		width: auto;
-		border-radius: 16px 16px 0 0;
-		box-shadow: 0 -24px 60px -20px #000;
-		animation: sheet-up 0.24s cubic-bezier(0.4, 0, 0.2, 1);
-		z-index: 80;
-	}
+	/* keep popovers anchored beneath their trigger, not as bottom sheets */
 	.pop .pop-list {
 		max-height: 50vh;
 	}
-	@keyframes sheet-up {
-		from {
-			transform: translateY(100%);
-		}
-		to {
-			transform: none;
-		}
-	}
-	.pop-backdrop {
-		z-index: 75;
-		background: rgba(0, 0, 0, 0.5);
+	.team-pop {
+		left: auto;
+		right: 0;
 	}
 }

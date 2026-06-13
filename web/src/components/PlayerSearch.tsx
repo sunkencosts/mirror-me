@@ -107,7 +107,7 @@ export default function PlayerSearch({ rosters, onScrollToRoster }: Props) {
 					value={query}
 					onChange={(e) => setQuery(e.target.value)}
 					onKeyDown={handleKeyDown}
-					placeholder="Search players…"
+					placeholder="Players…"
 					type="search"
 					autoComplete="off"
 				/>
