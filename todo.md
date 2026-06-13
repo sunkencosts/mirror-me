@@ -1,8 +1,12 @@
 # Next
 # FE
--
+- Incorporate my ML rookie rankings
+- Use the Frontend_redesign to help fill out the placeholder pages.
 - Use sleeper historical data to test.
 - figure out a better way to rank teams
+- members page clicking on the member should go to lineup and focus team
+- memebers page - add the rarity ranking thing
+- members page see if it's possible to get their avatar
 
 # Pages
 - Some type of stats page for the league? 

@@ -1,33 +1,150 @@
+/* ============================================================
+   Mirror League — design tokens
+   Ported verbatim from design_handoff_mirror_league/styles.css :root.
+   Dark, field-green theme with a rarity accent system.
+   ============================================================ */
+
+:root {
+	color-scheme: dark;
+
+	/* surfaces */
+	--bg: #090c09;
+	--bg-grad-1: #0c120d;
+	--card: #0e140f;
+	--card-2: #121a14;
+	--card-3: #16201a;
+	--border: #1f2a21;
+	--border-2: #2b3a2d;
+	--border-glow: rgba(47, 208, 127, 0.3);
+
+	/* text */
+	--text: #eef3ee;
+	--dim: #9aa79b;
+	--mute: #67746a;
+	--faint: #46514a;
+
+	/* brand accent (tweakable) */
+	--accent: #2fd07f;
+	--accent-2: #1f9d62;
+	--accent-ink: #04130b;
+	--accent-soft: rgba(47, 208, 127, 0.12);
+	--accent-line: rgba(47, 208, 127, 0.34);
+
+	/* rarity */
+	--myt: #e9b53e;
+	--leg: #ef7a2c;
+	--epic: #8a4ee0;
+	--rare: #3186e6;
+	--unc: #3bbf6a;
+
+	/* status */
+	--win: #2fd07f;
+	--lose: #ef5b50;
+	--warn: #e9b53e;
+
+	/* type */
+	--display: "Archivo", system-ui, sans-serif;
+	--sans: "Hanken Grotesk", system-ui, sans-serif;
+	--mono: "Space Mono", ui-monospace, monospace;
+
+	/* metrics */
+	--side-w: 256px;
+	--radius: 14px;
+	--radius-sm: 10px;
+	--gap: 20px;
+	--row-h: 1;
+
+	/* ----------------------------------------------------------
+	   Back-compat aliases — existing CSS-module components still
+	   reference these older token names. Aliasing them to the new
+	   values keeps those components visually intact while the new
+	   tokens land. A later increment migrates modules off these.
+	   ---------------------------------------------------------- */
+	--bg-page: var(--bg);
+	--bg-card: var(--card);
+	--bg-elevated: var(--card-2);
+	--bg-hover: var(--card-3);
+	--border-ui: var(--border-2);
+	--color-empty: var(--faint);
+	--accent-hover: #5fe0a0; /* lightened accent so hovers still read */
+	--text-muted: var(--dim);
+	--text-dim: var(--mute);
+	--color-error: var(--lose);
+}
+
+[data-density="compact"] {
+	--gap: 14px;
+}
+
 *,
 *::before,
 *::after {
 	box-sizing: border-box;
 }
 
-:root {
-	--bg-page: #080d08;
-	--bg-card: #0f170f;
-	--bg-elevated: #141f14;
-	--bg-hover: #1a2a1a;
-
-	--border: #1e3020;
-	--border-ui: #2d4a30;
-	--color-empty: #3a5c3a;
-
-	--accent: #10b981;
-	--accent-hover: #34d399;
-
-	--text: #e2ece2;
-	--text-muted: #7a9e7a;
-	--text-dim: #4a6e4a;
-
-	--color-error: #f87171;
+html,
+body {
+	margin: 0;
+	height: 100%;
 }
 
 body {
-	margin: 0;
-	font-family: system-ui, sans-serif;
-	background: var(--bg-page);
+	font-family: var(--sans);
 	color: var(--text);
+	background: var(--bg);
 	overflow-x: hidden;
+	-webkit-font-smoothing: antialiased;
+	text-rendering: optimizeLegibility;
+}
+
+/* paint the app background on a fixed layer (behind all content) */
+.bg-layer {
+	position: fixed;
+	inset: 0;
+	z-index: -1;
+	background:
+		radial-gradient(1100px 600px at 78% -10%, rgba(47, 208, 127, 0.07), transparent 60%),
+		radial-gradient(900px 500px at 0% 0%, rgba(47, 208, 127, 0.04), transparent 55%),
+		linear-gradient(180deg, var(--bg-grad-1), var(--bg) 40%);
+}
+
+::selection {
+	background: var(--accent-soft);
+}
+
+a {
+	color: inherit;
+	text-decoration: none;
+}
+
+button {
+	font-family: inherit;
+	color: inherit;
+	cursor: pointer;
+	border: none;
+	background: none;
+}
+
+.mono {
+	font-family: var(--mono);
+}
+
+.tnum {
+	font-variant-numeric: tabular-nums;
+}
+
+/* scrollbars */
+*::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+	background: #1c261d;
+	border-radius: 20px;
+	border: 2px solid var(--bg);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+	background: #26342780;
 }

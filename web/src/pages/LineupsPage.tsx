@@ -1,7 +1,8 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useParams, useSearchParams } from "react-router";
 import { bookmarksKey, fetchJson, patchJson } from "../api";
+import { Icon } from "../components/icons";
 import LeagueSummary from "../components/LeagueSummary";
 import PlayerSearch from "../components/PlayerSearch";
 import RosterCard from "../components/RosterCard";
@@ -9,31 +10,26 @@ import { useAuth } from "../context/AuthContext";
 import { useDismissed } from "../hooks/useDismissed";
 import { computePowerScore } from "../scoring";
 import type { League, LeagueBookmark, LeagueConfig, Lineup, Roster, WeekMatchup } from "../types";
-import styles from "./LeaguePage.module.css";
+import styles from "./LineupsPage.module.css";
 
-export default function LeaguePage() {
-	const { leagueId = "", week } = useParams();
+export default function LineupsPage() {
+	const { leagueId = "" } = useParams();
+	const [searchParams, setSearchParams] = useSearchParams();
+	const week = searchParams.get("week");
 	const weekNumber = week ? parseInt(week, 10) : 1;
-	const navigate = useNavigate();
 	const { userId } = useAuth();
 	const queryClient = useQueryClient();
 
 	const leagueQueryKey = ["league", leagueId] as const;
 
-	const {
-		data: league,
-		isLoading: leagueLoading,
-	} = useQuery<League>({
+	const { data: league, isLoading: leagueLoading } = useQuery<League>({
 		queryKey: leagueQueryKey,
 		queryFn: () => fetchJson(`/league/${leagueId}`),
 		enabled: !!leagueId,
 		throwOnError: true,
 	});
 
-	const {
-		data: rosters = [],
-		isLoading: rostersLoading,
-	} = useQuery<Roster[]>({
+	const { data: rosters = [], isLoading: rostersLoading } = useQuery<Roster[]>({
 		queryKey: ["rosters", leagueId],
 		queryFn: () => fetchJson(`/league/${leagueId}/rosters`),
 		select: (data) => data ?? [],
@@ -41,10 +37,7 @@ export default function LeaguePage() {
 		throwOnError: true,
 	});
 
-	const {
-		data: weekMatchups = [],
-		isLoading: weekMatchupsLoading,
-	} = useQuery<WeekMatchup[]>({
+	const { data: weekMatchups = [], isLoading: weekMatchupsLoading } = useQuery<WeekMatchup[]>({
 		queryKey: ["week-matchups", leagueId, weekNumber],
 		queryFn: () => fetchJson(`/league/${leagueId}/week/${weekNumber}`),
 		select: (data) => data ?? [],
@@ -102,7 +95,6 @@ export default function LeaguePage() {
 		const starterSlots = league.roster_positions.filter((p) => p !== "BN");
 		return {
 			starterSlots,
-			benchSlots: league.roster_positions.length - starterSlots.length,
 			irSlots: league.settings.reserve_slots,
 			taxiSlots: league.settings.taxi_slots,
 		};
@@ -113,6 +105,8 @@ export default function LeaguePage() {
 		[rosters],
 	);
 
+	const [teamMenuOpen, setTeamMenuOpen] = useState(false);
+
 	const [dismissedToEnd, setDismissedToEnd] = useDismissed(leagueId);
 
 	const dismissedSet = useMemo(() => new Set(dismissedToEnd), [dismissedToEnd]);
@@ -122,13 +116,11 @@ export default function LeaguePage() {
 		[rosters, dismissedSet],
 	);
 
-	const rosterById = useMemo(
-		() => new Map(rosters.map((r) => [r.roster_id, r])),
-		[rosters],
-	);
+	const rosterById = useMemo(() => new Map(rosters.map((r) => [r.roster_id, r])), [rosters]);
 
 	const dismissedRosters = useMemo(
-		() => dismissedToEnd.map((id) => rosterById.get(id)).filter((r): r is Roster => r !== undefined),
+		() =>
+			dismissedToEnd.map((id) => rosterById.get(id)).filter((r): r is Roster => r !== undefined),
 		[dismissedToEnd, rosterById],
 	);
 
@@ -147,7 +139,11 @@ export default function LeaguePage() {
 
 	function renderCard(roster: Roster, isDismissed: boolean) {
 		return (
-			<div key={roster.roster_id} id={`roster-${roster.roster_id}`} className={styles.rosterWrapper}>
+			<div
+				key={roster.roster_id}
+				id={`roster-${roster.roster_id}`}
+				className={styles.rosterWrapper}
+			>
 				<RosterCard
 					roster={roster}
 					weekMatchup={matchupByRosterId.get(roster.roster_id) ?? null}
@@ -175,38 +171,61 @@ export default function LeaguePage() {
 	}
 
 	return (
-		<>
+		<div className="fade-in">
 			<LeagueSummary
 				league={league}
 				weekNumber={weekNumber}
-				onWeekChange={(w) => navigate(`/league/${leagueId}/week/${w}`)}
+				onWeekChange={(w) => setSearchParams({ week: String(w) })}
 			/>
-			<div className={styles.controls}>
+			<div className="lineup-toolbar">
 				<PlayerSearch rosters={rosters} onScrollToRoster={scrollToRoster} />
-				<select
-					className={styles.teamSelect}
-					value=""
-					onChange={(e) => {
-						const id = Number(e.target.value);
-						if (id) scrollToRoster(id);
-					}}
-				>
-					<option value="" disabled>Jump to team…</option>
-					{[...activeRosters, ...dismissedRosters].map((r) => (
-						<option key={r.roster_id} value={r.roster_id}>
-							{r.team_name || `Team ${r.roster_id}`}
-						</option>
-					))}
-				</select>
+				<div className="select">
+					<button
+						type="button"
+						className="select-trigger"
+						aria-label="Jump to team"
+						aria-expanded={teamMenuOpen}
+						onClick={() => setTeamMenuOpen((open) => !open)}
+					>
+						<Icon name="users" />
+						<span>Jump to team…</span>
+						<Icon name="chevDown" />
+					</button>
+					{teamMenuOpen && (
+						<>
+							<button
+								type="button"
+								aria-label="Close"
+								className="pop-backdrop"
+								onMouseDown={() => setTeamMenuOpen(false)}
+							/>
+							<div className="pop team-pop">
+								<div className="pop-list">
+									{[...activeRosters, ...dismissedRosters].map((r) => (
+										<button
+											key={r.roster_id}
+											type="button"
+											className="pop-item"
+											onClick={() => {
+												scrollToRoster(r.roster_id);
+												setTeamMenuOpen(false);
+											}}
+										>
+											<span className="pname">{r.team_name || `Team ${r.roster_id}`}</span>
+										</button>
+									))}
+								</div>
+							</div>
+						</>
+					)}
+				</div>
 			</div>
-			<div className={styles.rosterList}>
-				{activeRosters.map((roster) => renderCard(roster, false))}
-			</div>
+			<div className="teams-grid">{activeRosters.map((roster) => renderCard(roster, false))}</div>
 			{dismissedRosters.length > 0 && (
-				<div className={styles.dismissedList}>
+				<div className="teams-grid dismissed-grid">
 					{dismissedRosters.map((roster) => renderCard(roster, true))}
 				</div>
 			)}
-		</>
+		</div>
 	);
 }

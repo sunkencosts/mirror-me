@@ -1,18 +1,16 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRosterCard } from "../hooks/useRosterCard";
-import { slotLabel } from "../slots";
+import { slotLabel, slotPosClass } from "../slots";
 import type { Lineup, Player, Roster, WeekMatchup } from "../types";
+import { EyeIcon, EyeSlashIcon, Icon } from "./icons";
 import PlayerCard from "./PlayerCard";
 import PlayerPickerItem from "./PlayerPickerItem";
-import styles from "./RosterCard.module.css";
 import RosterRarity from "./RosterRarity";
-import { EyeIcon, EyeSlashIcon } from "./icons";
 
 interface Props {
 	roster: Roster;
 	weekMatchup?: WeekMatchup | null;
 	starterSlots: string[];
-	benchSlots: number;
 	irSlots: number;
 	taxiSlots: number;
 	allScores: number[];
@@ -36,6 +34,7 @@ interface StarterRowProps {
 	onClearOverride: () => void;
 	officialPoints?: number;
 	overridePoints?: number;
+	pointsFor: (playerId: string) => number | undefined;
 }
 
 function StarterRow({
@@ -49,73 +48,100 @@ function StarterRow({
 	onClearOverride,
 	officialPoints,
 	overridePoints,
+	pointsFor,
 }: StarterRowProps) {
+	const [query, setQuery] = useState("");
+	const searchRef = useRef<HTMLInputElement>(null);
 	const isOverridden = overridePlayer !== null;
+	const posCls = slotPosClass(slot);
 	const delta =
 		officialPoints !== undefined && overridePoints !== undefined
 			? overridePoints - officialPoints
 			: null;
 
-	return (
-		<div className={styles.starterRow}>
-			<div className={styles.officialCell}>
-				{officialPlayer ? (
-					<PlayerCard player={officialPlayer} points={officialPoints} dimmed={isOverridden} />
-				) : (
-					<div className={styles.emptySlot}>
-						<div className={styles.emptyAvatar} />
-						<span className={styles.emptyLabel}>Empty</span>
-					</div>
-				)}
-			</div>
+	useEffect(() => {
+		if (isPickerOpen) {
+			searchRef.current?.focus();
+		} else {
+			setQuery("");
+		}
+	}, [isPickerOpen]);
 
-			<div className={styles.slotCell}>
-				<div className={styles.slotRow}>
-					<span className={`${styles.slotPill} ${isOverridden ? styles.slotPillOverridden : ""}`}>
-						{slotLabel(slot)}
-					</span>
-					{delta !== null && (
-						<span
-							className={`${styles.deltaBadge} ${delta >= 0 ? styles.deltaPos : styles.deltaNeg}`}
-						>
+	const filtered = query
+		? eligiblePicks.filter((p) =>
+				`${p.first_name} ${p.last_name}`.toLowerCase().includes(query.toLowerCase()),
+			)
+		: eligiblePicks;
+
+	return (
+		<div className={`prow${isOverridden ? " scored" : ""}`}>
+			{officialPlayer ? (
+				<PlayerCard player={officialPlayer} points={officialPoints} dimmed={isOverridden} />
+			) : (
+				<div className="empty-slot">
+					<div className="ring" />
+					<span>Empty</span>
+				</div>
+			)}
+
+			<div className="pos-cell">
+				{isOverridden && delta !== null ? (
+					<div className="stack">
+						<span className={`pos ${posCls}`}>{slotLabel(slot)}</span>
+						<span className={`delta ${delta >= 0 ? "pos" : "neg"} tnum`}>
 							{delta >= 0 ? "+" : ""}
 							{delta.toFixed(1)}
 						</span>
-					)}
-				</div>
+					</div>
+				) : (
+					<span className={`pos ${posCls}`}>{slotLabel(slot)}</span>
+				)}
 			</div>
 
-			<div className={styles.pickCell}>
-				{overridePlayer !== null ? (
+			<div className="your-cell">
+				{isOverridden ? (
 					<button
 						type="button"
-						className={styles.overrideChipBtn}
+						className="your-pick-btn"
 						onClick={onClearOverride}
 						title="Click to remove override"
 					>
 						<PlayerCard player={overridePlayer} reversed points={overridePoints} />
 					</button>
 				) : (
-					<div className={styles.overrideCta}>
-						<button type="button" className={styles.overrideBtn} onClick={onTogglePicker}>
-							+ Override
+					<>
+						<button type="button" className="override-btn" onClick={onTogglePicker}>
+							<Icon name="plus" />
+							Override
 						</button>
 						{isPickerOpen && (
-							<div className={styles.pickerDropdown}>
-								{eligiblePicks.length > 0 ? (
-									eligiblePicks.map((p) => (
-										<PlayerPickerItem
-											key={p.player_id}
-											player={p}
-											onClick={() => onPickOverride(p)}
-										/>
-									))
-								) : (
-									<p className={styles.pickerEmpty}>No eligible bench players</p>
-								)}
+							<div className="pop">
+								<div className="pop-search">
+									<Icon name="search" />
+									<input
+										ref={searchRef}
+										value={query}
+										onChange={(e) => setQuery(e.target.value)}
+										placeholder={`Search ${slotLabel(slot)}s…`}
+									/>
+								</div>
+								<div className="pop-list">
+									{filtered.length > 0 ? (
+										filtered.map((p) => (
+											<PlayerPickerItem
+												key={p.player_id}
+												player={p}
+												points={pointsFor(p.player_id)}
+												onClick={() => onPickOverride(p)}
+											/>
+										))
+									) : (
+										<div className="pop-empty">No eligible bench players</div>
+									)}
+								</div>
 							</div>
 						)}
-					</div>
+					</>
 				)}
 			</div>
 		</div>
@@ -126,7 +152,6 @@ export default function RosterCard({
 	roster,
 	weekMatchup,
 	starterSlots,
-	benchSlots,
 	irSlots,
 	taxiSlots,
 	allScores,
@@ -138,7 +163,7 @@ export default function RosterCard({
 	isDismissed,
 	onToggleDismiss,
 }: Props) {
-	const [reservesOpen, setReservesOpen] = useState(false);
+	const [benchOpen, setBenchOpen] = useState(false);
 
 	const {
 		activePlayers,
@@ -162,161 +187,152 @@ export default function RosterCard({
 		handlePickOverride,
 		handleClearOverride,
 		handleCloseAllPickers,
-	} = useRosterCard({ roster, weekMatchup, starterSlots, lineups, userId, leagueId, weekNumber, currentWeek });
+	} = useRosterCard({
+		roster,
+		weekMatchup,
+		starterSlots,
+		lineups,
+		userId,
+		leagueId,
+		weekNumber,
+		currentWeek,
+	});
 
 	function getPoints(playerId: string) {
 		return weekHasScoring ? (playerPoints[playerId] ?? 0) : undefined;
 	}
 
+	const verdictClass = winner === "user" ? "win" : winner === "official" ? "lose" : "tie";
+	const verdictText = winner ? { user: "You Win", official: "You Lose", tie: "Tie" }[winner] : "";
+	const showVerdict = hasOverrides && winner !== null;
+	const yourScoreColor =
+		winner === "user" ? "var(--win)" : winner === "official" ? "var(--lose)" : undefined;
+
 	return (
-		<div className={styles.rosterCard}>
-			<div className={styles.teamHeader}>
+		<div className={`team${isDismissed ? " dismissed" : ""}`}>
+			<div className="team-head">
 				<button
 					type="button"
-					className={styles.eyeBtn}
+					className="eye"
 					aria-label={isDismissed ? "Restore team" : "Dismiss team to end"}
 					onClick={onToggleDismiss}
 				>
 					{isDismissed ? <EyeSlashIcon /> : <EyeIcon />}
 				</button>
-				<h2 className={styles.teamName}>{roster.team_name || `Team ${roster.roster_id}`}</h2>
+				<h3>{roster.team_name || `Team ${roster.roster_id}`}</h3>
 			</div>
 
 			{!isDismissed && (
 				<>
 					<RosterRarity players={activePlayers} starters={activeStarters} allScores={allScores} />
 
-					<div className={styles.headerScores}>
-						<div className={styles.scoreCol}>
-							<span className={styles.scoreLabel}>Official Score</span>
-							<span className={styles.officialScore}>{officialPoints?.toFixed(2) ?? "—"}</span>
+					<div className="score-strip">
+						<div className="col">
+							<div className="l">Official Score</div>
+							<div className="v tnum">
+								{officialPoints != null ? officialPoints.toFixed(2) : "—"}
+							</div>
 						</div>
-						<div className={styles.scoreDiff}>
-							<span
-								className={`${styles.winnerBadge} ${winner ? styles[winner] : ""}`}
-								style={{ visibility: hasOverrides && winner ? "visible" : "hidden" }}
-							>
-								{winner ? { user: "You Win", official: "You Lose", tie: "Tie" }[winner] : "—"}
-							</span>
-							<span
-								className={`${styles.diffBadge} ${diff !== null && diff >= 0 ? styles.deltaPos : styles.deltaNeg}`}
-								style={{ visibility: hasOverrides && diff !== null ? "visible" : "hidden" }}
-							>
-								{diff !== null ? `${diff >= 0 ? "+" : ""}${diff.toFixed(2)}` : "—"}
-							</span>
-						</div>
-						<div className={`${styles.scoreCol} ${styles.scoreColRight}`}>
-							<span className={styles.scoreLabel}>Your Score</span>
+						{showVerdict && (
+							<div className={`verdict ${verdictClass}`}>
+								{verdictText}
+								{diff !== null && (
+									<span className="d tnum">
+										{diff >= 0 ? "+" : ""}
+										{diff.toFixed(2)}
+									</span>
+								)}
+							</div>
+						)}
+						<div className="col right">
+							<div className="l">Your Score</div>
 							{hasOverrides ? (
-								<span className={`${styles.userScore} ${winner ? styles[`userScore_${winner}`] : ""}`}>
-									{userTotal?.toFixed(2) ?? "—"}
-								</span>
+								<div className="v tnum" style={{ color: yourScoreColor }}>
+									{userTotal != null ? userTotal.toFixed(2) : "—"}
+								</div>
 							) : (
-								<span className={styles.noPicks}>No picks yet</span>
+								<div className="v muted">No picks yet</div>
 							)}
 						</div>
 					</div>
 
-					<div className={styles.section}>
-						<div className={styles.columnHeaders}>
-							<span className={styles.colHeaderOfficial}>Official</span>
-							<span />
-							<span className={styles.colHeaderPick}>Your Pick</span>
-						</div>
-
-						{showAuthPrompt && (
-							<p className={styles.authPrompt}>
-								<a href={`${import.meta.env.VITE_API_URL ?? ""}/auth/google`}>Sign in</a> to save your lineup picks.
-							</p>
-						)}
-						<div className={styles.starterGrid}>
-							{starterSlots.map((slot, i) => {
-								const official = activeStarters[i] ?? null;
-								const overridePlayer = overrides[i] ?? null;
-								return (
-									<StarterRow
-										key={slotKeys[i]}
-										slot={slot}
-										officialPlayer={official}
-										overridePlayer={overridePlayer}
-										isPickerOpen={selectedIndex === i}
-										eligiblePicks={eligiblePicksBySlot[i]}
-										onTogglePicker={() => handleTogglePicker(i)}
-										onPickOverride={(player) => handlePickOverride(i, player)}
-										onClearOverride={() => handleClearOverride(i)}
-										officialPoints={official ? getPoints(official.player_id) : undefined}
-										overridePoints={overridePlayer ? getPoints(overridePlayer.player_id) : undefined}
-									/>
-								);
-							})}
-						</div>
+					<div className="roster-head">
+						<span className="o">Official</span>
+						<span className="y">Your Pick</span>
 					</div>
 
-					<div className={styles.section}>
-						<button
-							type="button"
-							className={styles.sectionToggle}
-							onClick={() => setReservesOpen((open) => !open)}
-							aria-expanded={reservesOpen}
-						>
-							<h3 className={styles.sectionLabel}>Bench</h3>
-							<span className={styles.chevron} aria-hidden="true">{reservesOpen ? "▲" : "▼"}</span>
-						</button>
-						{reservesOpen && (
-							<>
-								<div className={styles.playerList}>
-									{bench.map((player) => (
-										<PlayerCard
-											key={player.player_id}
-											player={player}
-											points={getPoints(player.player_id)}
-										/>
-									))}
-									{Array.from({ length: Math.max(0, benchSlots - bench.length) }).map((_, i) => (
-										// biome-ignore lint/suspicious/noArrayIndexKey: empty placeholder rows have no identity
-										<div key={`empty-${i}`} className={styles.emptyStarterRow}>
-											<div className={styles.emptyAvatar} />
-											<span className={styles.emptyLabel}>Empty</span>
-										</div>
-									))}
+					{showAuthPrompt && (
+						<p className="auth-prompt">
+							<a href={`${import.meta.env.VITE_API_URL ?? ""}/auth/google`}>Sign in</a> to save your
+							lineup picks.
+						</p>
+					)}
+
+					{starterSlots.map((slot, i) => {
+						const official = activeStarters[i] ?? null;
+						const overridePlayer = overrides[i] ?? null;
+						return (
+							<StarterRow
+								key={slotKeys[i]}
+								slot={slot}
+								officialPlayer={official}
+								overridePlayer={overridePlayer}
+								isPickerOpen={selectedIndex === i}
+								eligiblePicks={eligiblePicksBySlot[i]}
+								onTogglePicker={() => handleTogglePicker(i)}
+								onPickOverride={(player) => handlePickOverride(i, player)}
+								onClearOverride={() => handleClearOverride(i)}
+								officialPoints={official ? getPoints(official.player_id) : undefined}
+								overridePoints={overridePlayer ? getPoints(overridePlayer.player_id) : undefined}
+								pointsFor={getPoints}
+							/>
+						);
+					})}
+
+					<button
+						type="button"
+						className="bench"
+						onClick={() => setBenchOpen((open) => !open)}
+						aria-expanded={benchOpen}
+					>
+						Bench
+						<Icon name="chevDown" />
+					</button>
+					{benchOpen && (
+						<div className="bench-list">
+							{bench.map((player) => (
+								<div key={player.player_id} className="bench-row">
+									<PlayerCard player={player} points={getPoints(player.player_id)} />
 								</div>
-								{irSlots > 0 && activeReserve.length > 0 && (
-									<>
-										<h4 className={styles.subSectionLabel}>IR</h4>
-										<div className={styles.playerList}>
-											{activeReserve.map((player) => (
-												<PlayerCard
-													key={player.player_id}
-													player={player}
-													points={getPoints(player.player_id)}
-												/>
-											))}
+							))}
+							{irSlots > 0 && activeReserve.length > 0 && (
+								<>
+									<div className="bench-sublabel">IR</div>
+									{activeReserve.map((player) => (
+										<div key={player.player_id} className="bench-row">
+											<PlayerCard player={player} points={getPoints(player.player_id)} />
 										</div>
-									</>
-								)}
-								{taxiSlots > 0 && activeTaxi.length > 0 && (
-									<>
-										<h4 className={styles.subSectionLabel}>Taxi</h4>
-										<div className={styles.playerList}>
-											{activeTaxi.map((player) => (
-												<PlayerCard
-													key={player.player_id}
-													player={player}
-													points={getPoints(player.player_id)}
-												/>
-											))}
+									))}
+								</>
+							)}
+							{taxiSlots > 0 && activeTaxi.length > 0 && (
+								<>
+									<div className="bench-sublabel">Taxi</div>
+									{activeTaxi.map((player) => (
+										<div key={player.player_id} className="bench-row">
+											<PlayerCard player={player} points={getPoints(player.player_id)} />
 										</div>
-									</>
-								)}
-							</>
-						)}
-					</div>
+									))}
+								</>
+							)}
+						</div>
+					)}
 
 					{selectedIndex !== null && (
 						<button
 							type="button"
 							aria-label="Close"
-							className={styles.backdrop}
+							className="pop-backdrop"
 							onMouseDown={handleCloseAllPickers}
 						/>
 					)}

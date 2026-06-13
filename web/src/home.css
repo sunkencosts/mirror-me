@@ -1,0 +1,147 @@
+/* ============================================================
+   Mirror League — My Leagues / Home page styles
+   Ported from design_handoff_mirror_league/styles.css (home section).
+   `.lg-cards` / `.lg-card` base live in shell.css; this adds the hero,
+   connect form, and the remaining league-card bits.
+   ============================================================ */
+
+.home-hero {
+	padding: 30px 28px;
+	border-radius: 18px;
+	border: 1px solid var(--border);
+	position: relative;
+	overflow: hidden;
+	margin-bottom: 24px;
+	background:
+		radial-gradient(700px 280px at 90% -20%, rgba(47, 208, 127, 0.12), transparent 65%),
+		linear-gradient(180deg, var(--card-2), var(--card));
+}
+.home-hero h1 {
+	font-family: var(--display);
+	font-weight: 800;
+	font-size: 30px;
+	letter-spacing: -0.6px;
+	margin: 0 0 10px;
+	max-width: 560px;
+	line-height: 1.08;
+}
+.home-hero p {
+	color: var(--dim);
+	font-size: 14.5px;
+	max-width: 540px;
+	line-height: 1.6;
+	margin: 0 0 18px;
+}
+.home-hero .cta {
+	display: flex;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+
+.connect-inline {
+	display: none;
+}
+.connect-inline.open {
+	display: block;
+	margin-top: 18px;
+}
+.connect-inner {
+	padding-top: 18px;
+	border-top: 1px solid var(--border);
+}
+.connect-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 10px;
+	max-width: 520px;
+}
+@media (max-width: 640px) {
+	.connect-grid {
+		grid-template-columns: 1fr;
+	}
+}
+.field {
+	display: flex;
+	align-items: center;
+	width: 100%;
+	height: 44px;
+	padding: 0 14px;
+	border-radius: 11px;
+	background: var(--card);
+	border: 1px solid var(--border-2);
+	color: var(--text);
+	font-size: 13.5px;
+	font-family: inherit;
+	outline: none;
+	transition: border-color 0.15s;
+}
+.field::placeholder {
+	color: var(--mute);
+}
+.field:focus {
+	border-color: var(--accent-line);
+}
+
+.how-steps {
+	margin: 0;
+	padding-left: 18px;
+	font-size: 13.5px;
+	color: var(--dim);
+	line-height: 1.75;
+}
+
+/* league-card bits not in shell.css */
+.lg-card .lg-av {
+	width: 42px;
+	height: 42px;
+	border-radius: 11px;
+	display: grid;
+	place-items: center;
+	font-size: 21px;
+	background: #1a221a;
+	border: 1px solid var(--border-2);
+	flex: 0 0 auto;
+	overflow: hidden;
+}
+.lg-card .lg-av img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.lg-card .id {
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--mute);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.lg-card .nm {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.lg-card-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+.lg-card .meta {
+	display: flex;
+	gap: 7px;
+	flex-wrap: wrap;
+}
+
+@media (max-width: 760px) {
+	.home-hero {
+		padding: 22px 17px;
+	}
+	.home-hero h1 {
+		font-size: 22px;
+	}
+	.home-hero p {
+		font-size: 13.5px;
+	}
+}

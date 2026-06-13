@@ -3,8 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchJson } from "../api";
 import { RARITY_ORDER, type Rarity } from "../rarity";
 import type { Player, Roster, SlimPlayer } from "../types";
-import PlayerCard from "./PlayerCard";
-import styles from "./PlayerSearch.module.css";
+import { Icon } from "./icons";
+import PlayerAvatar from "./PlayerAvatar";
 
 function toPlayer(slim: SlimPlayer): Player {
 	return { ...slim, number: 0, age: 0, active: true, rarity: slim.rarity as Rarity };
@@ -48,9 +48,14 @@ export default function PlayerSearch({ rosters, onScrollToRoster }: Props) {
 			.filter((p) => `${p.first_name} ${p.last_name}`.toLowerCase().includes(q))
 			.map((p) => ({
 				player: p,
-				score: p.first_name.toLowerCase().startsWith(q) || p.last_name.toLowerCase().startsWith(q) ? 0 : 1,
+				score:
+					p.first_name.toLowerCase().startsWith(q) || p.last_name.toLowerCase().startsWith(q)
+						? 0
+						: 1,
 			}))
-			.sort((a, b) => a.score - b.score || rarityRank(a.player.rarity) - rarityRank(b.player.rarity))
+			.sort(
+				(a, b) => a.score - b.score || rarityRank(a.player.rarity) - rarityRank(b.player.rarity),
+			)
 			.slice(0, 8)
 			.map(({ player }) => player);
 	}, [allPlayers, query]);
@@ -95,35 +100,42 @@ export default function PlayerSearch({ rosters, onScrollToRoster }: Props) {
 	}
 
 	return (
-		<div ref={containerRef} className={styles.container}>
-			<input
-				className={styles.input}
-				value={query}
-				onChange={(e) => setQuery(e.target.value)}
-				onKeyDown={handleKeyDown}
-				placeholder="Search players…"
-				type="search"
-				autoComplete="off"
-			/>
+		<div ref={containerRef} className="search-wrap">
+			<div className="input">
+				<Icon name="search" />
+				<input
+					value={query}
+					onChange={(e) => setQuery(e.target.value)}
+					onKeyDown={handleKeyDown}
+					placeholder="Search players…"
+					type="search"
+					autoComplete="off"
+				/>
+			</div>
 			{results.length > 0 && (
-				<div className={styles.dropdown}>
-					{results.map((slim, i) => {
-						const owner = ownerMap.get(slim.player_id);
-						return (
-							<button
-								key={slim.player_id}
-								type="button"
-								className={`${styles.result} ${i === activeIndex ? styles.resultActive : ""}`}
-								onClick={() => handleSelect(slim)}
-								onMouseEnter={() => setActiveIndex(i)}
-							>
-								<PlayerCard player={toPlayer(slim)} compact />
-								<span className={styles.ownerLabel}>
-									{owner ? owner.teamName : "Free Agent"}
-								</span>
-							</button>
-						);
-					})}
+				<div className="search-pop">
+					<div className="pop-list">
+						{results.map((slim, i) => {
+							const owner = ownerMap.get(slim.player_id);
+							return (
+								<button
+									key={slim.player_id}
+									type="button"
+									className={`pop-item${i === activeIndex ? " active" : ""}`}
+									onClick={() => handleSelect(slim)}
+									onMouseEnter={() => setActiveIndex(i)}
+								>
+									<PlayerAvatar player={toPlayer(slim)} />
+									<div style={{ minWidth: 0, flex: 1 }}>
+										<div className="pname">
+											{slim.first_name} {slim.last_name}
+										</div>
+										<div className="pmeta">{owner ? owner.teamName : "Free Agent"}</div>
+									</div>
+								</button>
+							);
+						})}
+					</div>
 				</div>
 			)}
 		</div>

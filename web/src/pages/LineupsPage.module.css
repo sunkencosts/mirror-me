@@ -1,0 +1,24 @@
+.rosterWrapper {
+	/* keep clear of the sticky topbar when jumping to a team */
+	scroll-margin-top: 90px;
+}
+
+@keyframes roster-flash {
+	0%,
+	20% {
+		box-shadow: 0 0 0 3px var(--accent);
+	}
+	100% {
+		box-shadow: none;
+	}
+}
+
+.highlighted {
+	animation: roster-flash 1.5s ease-out forwards;
+	border-radius: var(--radius);
+}
+
+.error {
+	color: var(--color-error);
+	margin-bottom: 1rem;
+}
