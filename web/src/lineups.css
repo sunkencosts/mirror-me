@@ -714,27 +714,6 @@
 		0 0 0 1px var(--accent-line);
 	overflow: hidden;
 }
-.pop .pop-search {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 10px 12px;
-	border-bottom: 1px solid var(--border);
-}
-.pop .pop-search svg {
-	width: 14px;
-	height: 14px;
-	color: var(--mute);
-}
-.pop .pop-search input {
-	background: none;
-	border: none;
-	outline: none;
-	color: var(--text);
-	font-family: inherit;
-	font-size: 13px;
-	width: 100%;
-}
 .pop-list {
 	max-height: 230px;
 	overflow: auto;

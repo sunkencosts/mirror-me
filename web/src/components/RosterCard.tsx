@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useRosterCard } from "../hooks/useRosterCard";
 import { slotLabel, slotPosClass } from "../slots";
 import type { Lineup, Player, Roster, WeekMatchup } from "../types";
@@ -50,28 +50,12 @@ function StarterRow({
 	overridePoints,
 	pointsFor,
 }: StarterRowProps) {
-	const [query, setQuery] = useState("");
-	const searchRef = useRef<HTMLInputElement>(null);
 	const isOverridden = overridePlayer !== null;
 	const posCls = slotPosClass(slot);
 	const delta =
 		officialPoints !== undefined && overridePoints !== undefined
 			? overridePoints - officialPoints
 			: null;
-
-	useEffect(() => {
-		if (isPickerOpen) {
-			searchRef.current?.focus();
-		} else {
-			setQuery("");
-		}
-	}, [isPickerOpen]);
-
-	const filtered = query
-		? eligiblePicks.filter((p) =>
-				`${p.first_name} ${p.last_name}`.toLowerCase().includes(query.toLowerCase()),
-			)
-		: eligiblePicks;
 
 	return (
 		<div className={`prow${isOverridden ? " scored" : ""}`}>
@@ -116,18 +100,9 @@ function StarterRow({
 						</button>
 						{isPickerOpen && (
 							<div className="pop">
-								<div className="pop-search">
-									<Icon name="search" />
-									<input
-										ref={searchRef}
-										value={query}
-										onChange={(e) => setQuery(e.target.value)}
-										placeholder={`Search ${slotLabel(slot)}s…`}
-									/>
-								</div>
 								<div className="pop-list">
-									{filtered.length > 0 ? (
-										filtered.map((p) => (
+									{eligiblePicks.length > 0 ? (
+										eligiblePicks.map((p) => (
 											<PlayerPickerItem
 												key={p.player_id}
 												player={p}
