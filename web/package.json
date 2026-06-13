@@ -9,7 +9,8 @@
 		"lint": "biome lint .",
 		"format": "biome format --write .",
 		"check": "biome check --write .",
-		"preview": "vite preview"
+		"preview": "vite preview",
+		"parity": "node scripts/parity.mjs"
 	},
 	"dependencies": {
 		"@tanstack/react-query": "^5.100.8",
@@ -23,6 +24,10 @@
 		"@types/react": "^19.2.14",
 		"@types/react-dom": "^19.2.3",
 		"@vitejs/plugin-react": "^6.0.1",
+		"agentation": "^3.0.2",
+		"pixelmatch": "^7.2.0",
+		"playwright": "^1.60.0",
+		"pngjs": "^7.0.0",
 		"typescript": "~6.0.2",
 		"vite": "^8.0.9"
 	}

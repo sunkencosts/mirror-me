@@ -1,4 +1,4 @@
-import styles from "./WeekSelector.module.css";
+import { Icon } from "./icons";
 
 interface Props {
 	weekNumber: number;
@@ -9,23 +9,23 @@ interface Props {
 
 export default function WeekSelector({ weekNumber, onWeekChange, min = 1, max = 18 }: Props) {
 	return (
-		<div className={styles.container}>
+		<div className="week-pick">
 			<button
 				type="button"
-				className={styles.chevron}
 				disabled={weekNumber <= min}
 				onClick={() => onWeekChange(Math.max(min, weekNumber - 1))}
+				aria-label="Previous week"
 			>
-				&lsaquo;
+				<Icon name="chevL" />
 			</button>
-			<span className={styles.label}>WEEK {weekNumber}</span>
+			<span className="w">Week {weekNumber}</span>
 			<button
 				type="button"
-				className={styles.chevron}
 				disabled={weekNumber >= max}
 				onClick={() => onWeekChange(Math.min(max, weekNumber + 1))}
+				aria-label="Next week"
 			>
-				&rsaquo;
+				<Icon name="chevR" />
 			</button>
 		</div>
 	);

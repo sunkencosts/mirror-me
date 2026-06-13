@@ -8,6 +8,17 @@ export function slotLabel(slot: string): string {
 	return SLOT_DISPLAY[slot] ?? slot;
 }
 
+// Design's `.pos` badge variant: green default, blue flex, purple superflex.
+export function slotPosClass(slot: string): string {
+	if (slot === "FLEX") {
+		return "flex";
+	}
+	if (slot === "SUPER_FLEX" || slot === "SF") {
+		return "sf";
+	}
+	return "";
+}
+
 export const SLOT_ELIGIBILITY: Record<string, string[]> = {
 	QB: ["QB"],
 	RB: ["RB"],

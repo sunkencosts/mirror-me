@@ -1,8 +1,7 @@
 import { useMemo } from "react";
-import { RARITY_COLORS, RARITY_LABELS, RARITY_ORDER } from "../rarity";
-import { computePowerScore, getTierRelative, TIER_COLORS } from "../scoring";
+import { RARITY_LABELS, RARITY_ORDER, RARITY_SEG } from "../rarity";
+import { computePowerScore, getTierRelative } from "../scoring";
 import type { Player } from "../types";
-import styles from "./RosterRarity.module.css";
 
 interface Props {
 	players: Player[];
@@ -22,40 +21,35 @@ export default function RosterRarity({ players, starters, allScores }: Props) {
 	);
 
 	const score = useMemo(() => computePowerScore(players, starters), [players, starters]);
-
 	const tier = useMemo(() => getTierRelative(score, allScores), [score, allScores]);
-	const tierColor = TIER_COLORS[tier];
 	const present = RARITY_ORDER.filter((r) => rarityCounts[r] > 0);
 
 	return (
-		<div className={styles.rarityContainer}>
-			<div className={styles.header}>
-				<span className={styles.tierBadge} style={{ color: tierColor, borderColor: tierColor }}>
-					{tier}-TIER
-				</span>
-				<span className={styles.powerScore}>
-					<span className={styles.powerLabel}>ROSTER POWER</span>
-					<span className={styles.powerValue}>{score.toFixed(1)}/10</span>
+		<div className="power">
+			<div className="power-top">
+				<span className={`tier-badge tier-${tier}`}>{tier}-TIER</span>
+				<span className="power-num">
+					ROSTER POWER<b>{score.toFixed(1)}</b>/10
 				</span>
 			</div>
 
-			<div className={styles.rarityBar}>
+			<div className="power-bar">
 				{present.map((r) => (
-					<div
+					<span
 						key={r}
-						className={styles.raritySegment}
-						style={{ background: RARITY_COLORS[r], flex: rarityCounts[r] }}
+						className={RARITY_SEG[r]}
+						style={{ flex: rarityCounts[r] }}
 						title={`${RARITY_LABELS[r]}: ${rarityCounts[r]}`}
 					>
 						{rarityCounts[r]}
-					</div>
+					</span>
 				))}
 			</div>
 
-			<div className={styles.legend}>
+			<div className="power-legend">
 				{present.map((r) => (
-					<span key={r} className={styles.legendItem}>
-						<span className={styles.legendSwatch} style={{ background: RARITY_COLORS[r] }} />
+					<span key={r}>
+						<i className={RARITY_SEG[r]} />
 						{RARITY_LABELS[r]}
 					</span>
 				))}

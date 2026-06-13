@@ -1,6 +1,6 @@
 # Next
 # FE
--
+- Use the Frontend_redesign to help fill out the placeholder pages.
 - Use sleeper historical data to test.
 - figure out a better way to rank teams
 

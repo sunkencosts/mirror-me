@@ -30,6 +30,26 @@ export const RARITY_LABELS: Record<Rarity, string> = {
 	grey: "COM",
 };
 
+// Maps our rarity tiers to the design's `.pav` ring CSS classes.
+export const RARITY_RING: Record<Rarity, string> = {
+	mythic: "r-myt",
+	orange: "r-leg",
+	purple: "r-epic",
+	blue: "r-rare",
+	green: "r-unc",
+	grey: "r-com",
+};
+
+// Segment background class for the roster-power bar.
+export const RARITY_SEG: Record<Rarity, string> = {
+	mythic: "seg-myt",
+	orange: "seg-leg",
+	purple: "seg-epic",
+	blue: "seg-rare",
+	green: "seg-unc",
+	grey: "seg-com",
+};
+
 export const RARITY_GLOW: Record<Rarity, string> = {
 	mythic: `0 0 0 2px ${HEX.mythic}, 0 0 14px rgba(255, 215, 0, 0.7)`,
 	orange: `0 0 0 2px ${HEX.orange}, 0 0 10px rgba(249, 115, 22, 0.6)`,

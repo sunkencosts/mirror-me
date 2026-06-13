@@ -49,7 +49,6 @@ export interface Lineup {
 
 export interface LeagueConfig {
 	starterSlots: string[];
-	benchSlots: number;
 	irSlots: number;
 	taxiSlots: number;
 }
