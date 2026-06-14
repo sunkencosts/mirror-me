@@ -12,10 +12,9 @@ function SectionDivider({ label }: { label: string }) {
 }
 
 const KPIS = [
-	{ label: "CV R² — with pick", value: "0.373", pm: "±0.101", note: "post-draft model · 5-fold CV", bar: 37.3 },
-	{ label: "CV R² — with pick (PPR)", value: "0.331", pm: "±0.073", note: "post-draft model · 5-fold CV", bar: 33.1 },
-	{ label: "CV R² — no pick", value: "0.099", pm: "±0.163", note: "pre-draft model · 5-fold CV", bar: 9.9 },
-	{ label: "Training samples", value: "336", pm: null, note: "matched players · 2020–24", bar: null },
+	{ label: "CV R²", value: "0.373", pm: "±0.101", note: "5-fold CV", bar: 37.3 },
+	{ label: "CV R² (PPR)", value: "0.331", pm: "±0.073", note: "5-fold CV", bar: 33.1 },
+	{ label: "Training samples", value: "264", pm: null, note: "matched players · 2014–24", bar: null },
 	{ label: "CV folds", value: "5", pm: null, note: "train 4/5 · test 1/5 · rotate", bar: null },
 ];
 
@@ -35,8 +34,7 @@ const PIPELINE = [
 		title: "Feature Engineering",
 		body: (
 			<>
-				Derived features <code>total_touchdowns</code> and <code>yards_from_scrimmage</code>
-				package signal the model would otherwise discover slowly. Position-aware zeroing prevents
+				Derived features <code>total_touchdowns</code> and <code>yards_from_scrimmage</code> package signal the model would otherwise discover slowly. Position-aware zeroing prevents
 				gadget-play noise. StandardScaler + OneHotEncoder in a ColumnTransformer.
 			</>
 		),
@@ -46,10 +44,10 @@ const PIPELINE = [
 		title: "Random Forest Regressor",
 		body: (
 			<>
-				200-tree RandomForestRegressor wrapped in a full scikit-learn Pipeline. Two trained variants:
-				a <em>no-pick</em> model (pre-draft) and a <em>with-pick</em> model (post-draft). Draft slot is
-				one of the strongest single predictors of NFL success because it encodes combine data, injury
-				history, and scheme fit that box scores can't.
+				200-tree RandomForestRegressor wrapped in a full scikit-learn Pipeline, trained on college
+				production stats plus actual draft slot. Draft slot is one of the strongest single predictors
+				of NFL success because it encodes combine data, injury history, and scheme fit that box
+				scores can't.
 			</>
 		),
 	},
@@ -59,8 +57,8 @@ const PIPELINE = [
 		body: (
 			<>
 				Train on 4/5 of data, test on the held-out 1/5, rotate through all folds, average the
-				results. The 3–4× R² jump from no-pick to with-pick directly quantifies how much predictive
-				signal is locked in draft position vs college production alone.
+				results. The resulting CV R² (0.373 standard, 0.331 PPR) measures how much of the variance in
+				rookie fantasy output the model explains on players it never saw during training.
 			</>
 		),
 	},
@@ -128,52 +126,25 @@ export default function AboutTheModel() {
 				))}
 			</div>
 
-			<div className="grid-2" style={{ marginBottom: "var(--gap)" }}>
-				<div className="panel">
-					<div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-						<span className="tag">PRE-DRAFT</span>
-						<span style={{ fontFamily: "var(--display)", fontWeight: 700, fontSize: 15 }}>
-							No-Pick Model
-						</span>
-					</div>
-					<div className="sub" style={{ marginBottom: 14 }}>
-						College stats only · CV R² = 0.099 ±0.163
-					</div>
-					<p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--dim)", lineHeight: 1.65 }}>
-						Used before the draft, when pick numbers are unknown. Ranks prospects on college
-						production only. An R² of ~0.10 is low in absolute terms, but predicting NFL rookie
-						output from college stats alone is a genuinely hard forecasting problem. Even
-						experienced scouts miss constantly, and that difficulty is baked into the number.
-					</p>
-					<p style={{ margin: 0, fontSize: 13, color: "var(--dim)", lineHeight: 1.65 }}>
-						Intentionally trained on only 5 years of recent college data (2020 → 2021–25 NFL)
-						because offensive statistical patterns in college football shift with rule changes and
-						scheme trends.
-					</p>
+			<div className="panel" style={{ marginBottom: "var(--gap)" }}>
+				<div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+					<span className="tag green">POST-DRAFT</span>
+					<span style={{ fontFamily: "var(--display)", fontWeight: 700, fontSize: 15 }}>
+						The Model
+					</span>
 				</div>
-				<div className="panel">
-					<div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-						<span className="tag green">POST-DRAFT</span>
-						<span style={{ fontFamily: "var(--display)", fontWeight: 700, fontSize: 15 }}>
-							With-Pick Model
-						</span>
-					</div>
-					<div className="sub" style={{ marginBottom: 14 }}>
-						College stats + draft slot · CV R² = 0.373 ±0.101
-					</div>
-					<p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--dim)", lineHeight: 1.65 }}>
-						After draft day, the player's pick number is added as a feature. Draft position is one
-						of the strongest single predictors of NFL success because it's a compressed encoding of
-						combine numbers, injury history, and scheme fit that college box scores simply can't
-						see.
-					</p>
-					<p style={{ margin: 0, fontSize: 13, color: "var(--dim)", lineHeight: 1.65 }}>
-						Trained on 11 years of data (2014–2024 college → 2015–2025 NFL) since draft position
-						is a stable signal across eras. The 3–4× R² jump vs the no-pick model is the clearest
-						number in this project because it directly measures the scouting information hidden in a
-						single integer.
-					</p>
+				<div className="sub" style={{ marginBottom: 14 }}>
+					College stats + draft slot · CV R² = 0.373 ±0.101
 				</div>
+				<p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--dim)", lineHeight: 1.65 }}>
+					Ranks prospects on college production plus their actual draft slot. Draft position is one
+					of the strongest single predictors of NFL success because it's a compressed encoding of
+					combine numbers, injury history, and scheme fit that college box scores simply can't see.
+				</p>
+				<p style={{ margin: 0, fontSize: 13, color: "var(--dim)", lineHeight: 1.65 }}>
+					Trained on 11 years of data (2014–2024 college → 2015–2025 NFL) since draft position is
+					a stable signal across eras.
+				</p>
 			</div>
 
 			<div className="infobox" style={{ marginBottom: "var(--gap)" }}>
@@ -185,7 +156,7 @@ export default function AboutTheModel() {
 					<p style={{ margin: "0 0 8px", fontSize: 13, color: "var(--dim)", lineHeight: 1.65 }}>
 						An early model version ranked a Sun Belt running back unusually high. Inspecting his
 						SHAP waterfall revealed that his projected score was driven almost entirely by his
-						conference — a spurious correlation with no causal relationship to NFL success. His
+						conference, a spurious correlation with no causal relationship to NFL success. His
 						college production was ordinary; the model had just learned that Sun Belt backs
 						happened to over-perform in its small training window.
 					</p>

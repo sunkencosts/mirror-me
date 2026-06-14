@@ -58,7 +58,6 @@ export default function RankingsList({ scoringMode, posFilter, onPosFilterChange
 		[posFilter, usePpr],
 	);
 
-	const subtitle = `Post-draft · with-pick model · draft slot included as feature · sorted by projected ${usePpr ? "PPR " : ""}points`;
 
 	return (
 		<>
@@ -82,10 +81,8 @@ export default function RankingsList({ scoringMode, posFilter, onPosFilterChange
 			</div>
 
 			<div className="panel" style={{ marginBottom: "var(--gap)" }}>
-				<h4 style={{ marginBottom: 4 }}>2026 Rookie Projections</h4>
-				<div className="sub" style={{ marginBottom: 20 }}>
-					{subtitle}
-				</div>
+				<h4 style={{ marginBottom: 12 }}>2026 Rookie Projections</h4>
+
 
 				{filtered.length === 0 ? (
 					<div style={{ textAlign: "center", padding: "40px 20px" }}>
