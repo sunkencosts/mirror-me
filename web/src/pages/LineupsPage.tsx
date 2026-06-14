@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { bookmarksKey, fetchJson, patchJson } from "../api";
 import { Icon } from "../components/icons";
@@ -130,6 +130,40 @@ export default function LineupsPage() {
 		);
 	}
 
+	const scrollToRoster = useCallback((rosterId: number) => {
+		const el = document.getElementById(`roster-${rosterId}`);
+		if (!el) {
+			return;
+		}
+		el.scrollIntoView({ behavior: "smooth", block: "start" });
+		el.classList.add(styles.highlighted);
+		clearTimeout(highlightTimer.current);
+		highlightTimer.current = setTimeout(() => el.classList.remove(styles.highlighted), 1500);
+	}, []);
+
+	const focusRosterId = searchParams.get("roster");
+	const focusedRosterRef = useRef<string | null>(null);
+
+	useEffect(() => {
+		if (!focusRosterId || focusedRosterRef.current === focusRosterId) {
+			return;
+		}
+		if (leagueLoading || rostersLoading || weekMatchupsLoading) {
+			return;
+		}
+		const el = document.getElementById(`roster-${focusRosterId}`);
+		if (!el) {
+			return;
+		}
+		focusedRosterRef.current = focusRosterId;
+		scrollToRoster(Number(focusRosterId));
+		// Strip the param via the history API directly (not setSearchParams) so this
+		// doesn't register as a navigation and trigger ScrollRestoration back to top.
+		const url = new URL(window.location.href);
+		url.searchParams.delete("roster");
+		window.history.replaceState(null, "", url);
+	}, [focusRosterId, leagueLoading, rostersLoading, weekMatchupsLoading, scrollToRoster]);
+
 	if (leagueLoading || rostersLoading || weekMatchupsLoading) {
 		return <p>Loading…</p>;
 	}
@@ -159,15 +193,6 @@ export default function LineupsPage() {
 				/>
 			</div>
 		);
-	}
-
-	function scrollToRoster(rosterId: number) {
-		const el = document.getElementById(`roster-${rosterId}`);
-		if (!el) return;
-		el.scrollIntoView({ behavior: "smooth", block: "start" });
-		el.classList.add(styles.highlighted);
-		clearTimeout(highlightTimer.current);
-		highlightTimer.current = setTimeout(() => el.classList.remove(styles.highlighted), 1500);
 	}
 
 	return (

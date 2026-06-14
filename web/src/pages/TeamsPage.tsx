@@ -31,25 +31,30 @@ export default function TeamsPage() {
 
 	const scores = rosters.map((r) => computePowerScore(r.players, r.starters));
 
+	const sortedRosters = rosters
+		.map((roster, i) => ({ roster, power: scores[i] }))
+		.sort((a, b) => b.power - a.power);
+
 	return (
 		<div className="fade-in">
 			<div className="panel">
 				<h4>Teams</h4>
 				<div className="sub">{rosters.length} managers</div>
-				<div
-					className="lg-cards"
-					style={{ gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))" }}
-				>
-					{rosters.map((roster, i) => {
+				<div className="lg-cards">
+					{sortedRosters.map(({ roster, power }) => {
 						const name = roster.team_name || `Team ${roster.roster_id}`;
-						const power = scores[i];
 						const tier = getTierRelative(power, scores);
 						return (
-							<div key={roster.roster_id} className="lg-card" style={{ gap: 10 }}>
+							<Link
+								key={roster.roster_id}
+								to={`/${leagueId}/lineups?roster=${roster.roster_id}`}
+								className="lg-card"
+								style={{ padding: 12, gap: 8 }}
+							>
 								<div className="top">
 									<div
 										className={`pav ${TIER_RING[tier]}`}
-										style={{ background: avatarBg(name), width: 40, height: 40, fontSize: 14 }}
+										style={{ background: avatarBg(name), width: 32, height: 32, fontSize: 12 }}
 									>
 										{initials(name)}
 									</div>
@@ -57,7 +62,7 @@ export default function TeamsPage() {
 										<div
 											className="nm"
 											style={{
-												fontSize: 14,
+												fontSize: 13,
 												whiteSpace: "nowrap",
 												overflow: "hidden",
 												textOverflow: "ellipsis",
@@ -66,14 +71,17 @@ export default function TeamsPage() {
 											{name}
 										</div>
 									</div>
+									<span className="go" aria-hidden="true">
+										<Icon name="chevR" />
+									</span>
 								</div>
-								<div className="row2">
-									<span className="tag green">Power {power.toFixed(1)}</span>
-									<Link to={`/${leagueId}/lineups`} className="go">
-										Mirror <Icon name="chevR" />
-									</Link>
+								<div className="power-top" style={{ margin: 0 }}>
+									<span className={`tier-badge tier-${tier}`}>{tier}-TIER</span>
+									<span className="power-num">
+										ROSTER POWER<b>{power.toFixed(1)}</b>/10
+									</span>
 								</div>
-							</div>
+							</Link>
 						);
 					})}
 				</div>
