@@ -1,0 +1,344 @@
+/* ============================================================
+   Rookie Ranker page — ported from design_handoff_mirror_league/
+   styles.css. Tokens (--card, --border, --accent, etc.) come from
+   index.css; .panel/.tag/.pav/.pos/.infobox/.home-hero/.btn already
+   exist in shell.css/home.css and are reused as-is.
+   ============================================================ */
+
+/* icon inside .tag (first usage of an icon tag — .tag itself lives in shell.css).
+   Scoped to .rr-hero so this doesn't leak into .tag usages on other pages. */
+.rr-hero .tag svg {
+	width: 12px;
+	height: 12px;
+}
+
+/* segmented toggle (Standard / PPR scoring) */
+.seg {
+	display: inline-flex;
+	background: var(--card);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	padding: 3px;
+}
+.seg button {
+	flex: 1;
+	height: 28px;
+	padding: 0 14px;
+	border-radius: 7px;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--dim);
+	white-space: nowrap;
+}
+.seg button.on {
+	background: var(--accent-soft);
+	color: var(--accent);
+}
+
+/* position filter chips */
+.fchip {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	height: 34px;
+	padding: 0 13px;
+	border-radius: 10px;
+	border: 1px solid var(--border-2);
+	background: var(--card-2);
+	font-size: 12.5px;
+	font-weight: 600;
+	color: var(--dim);
+}
+.fchip.active {
+	color: var(--accent);
+	border-color: var(--accent-line);
+	background: var(--accent-soft);
+}
+.fchip svg {
+	width: 13px;
+	height: 13px;
+}
+
+/* rookie rankings table */
+.table-wrap {
+	overflow-x: auto;
+}
+.rk-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 13px;
+}
+.rk-table th {
+	text-align: left;
+	padding: 0 12px 10px;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.6px;
+	text-transform: uppercase;
+	color: var(--mute);
+	border-bottom: 1px solid var(--border);
+	white-space: nowrap;
+}
+.rk-table th.num-col {
+	text-align: right;
+}
+.rk-table td {
+	padding: 10px 12px;
+	border-bottom: 1px solid var(--border);
+	white-space: nowrap;
+}
+.rk-table tr:last-child td {
+	border-bottom: none;
+}
+.rk-table tr:hover td {
+	background: var(--card-2);
+}
+.rk-table .nm {
+	font-weight: 700;
+}
+.rk-table .num-col {
+	text-align: right;
+	font-family: var(--display);
+	font-weight: 800;
+}
+.rk-table .check-col {
+	width: 1%;
+}
+.rk-table .check-col input {
+	display: block;
+	width: 16px;
+	height: 16px;
+	accent-color: var(--accent);
+	cursor: pointer;
+}
+.rk-table tr.drafted td {
+	color: var(--mute);
+	text-decoration: line-through;
+}
+
+/* S/A/B tier pill */
+.tier-pill {
+	display: inline-grid;
+	place-items: center;
+	min-width: 24px;
+	height: 22px;
+	padding: 0 7px;
+	border-radius: 6px;
+	font-family: var(--display);
+	font-weight: 800;
+	font-size: 11px;
+	color: #0c130d;
+}
+.tier-pill.S {
+	background: var(--myt);
+}
+.tier-pill.A {
+	background: var(--leg);
+}
+.tier-pill.B {
+	background: var(--epic);
+	color: #fff;
+}
+
+/* "ABOUT THE MODEL" / "LIMITATIONS & ROADMAP" section dividers */
+.section-divider {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	margin: 36px 0 22px;
+}
+.section-divider .line {
+	flex: 1;
+	height: 1px;
+	background: var(--border);
+}
+
+/* KPI row */
+.kpi-row {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: var(--gap);
+	margin-bottom: var(--gap);
+}
+@media (max-width: 900px) {
+	.kpi-row {
+		grid-template-columns: repeat(2, 1fr);
+	}
+}
+.kpi {
+	padding: 16px 18px;
+	background: linear-gradient(180deg, var(--card-2), var(--card));
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+}
+.kpi .l {
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.8px;
+	color: var(--mute);
+	text-transform: uppercase;
+}
+.kpi .v {
+	font-family: var(--display);
+	font-weight: 800;
+	font-size: 28px;
+	margin-top: 8px;
+	letter-spacing: -0.5px;
+	white-space: nowrap;
+}
+.kpi .v .pm {
+	font-size: 14px;
+	font-weight: 500;
+	color: var(--mute);
+	margin-left: 5px;
+}
+.kpi .d {
+	font-size: 11.5px;
+	margin-top: 4px;
+	font-weight: 600;
+	color: var(--mute);
+}
+.kpi .bar {
+	height: 3px;
+	background: var(--border);
+	border-radius: 2px;
+	margin-top: 12px;
+}
+.kpi .bar .fill {
+	height: 100%;
+	background: var(--accent);
+	border-radius: 2px;
+}
+
+/* method grid (6 pipeline steps) */
+.method {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 14px;
+	margin-bottom: var(--gap);
+}
+@media (max-width: 820px) {
+	.method {
+		grid-template-columns: 1fr;
+	}
+}
+.mcard {
+	padding: 16px;
+	border: 1px solid var(--border);
+	border-radius: 12px;
+	background: var(--card-2);
+}
+.mcard .step {
+	font-family: var(--display);
+	font-weight: 800;
+	font-size: 13px;
+	color: var(--accent);
+}
+.mcard h5 {
+	margin: 8px 0;
+	font-family: var(--display);
+	font-weight: 700;
+	font-size: 15px;
+	white-space: nowrap;
+}
+.mcard p {
+	margin: 0;
+	font-size: 12.5px;
+	color: var(--dim);
+	line-height: 1.55;
+}
+.mcard code {
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--accent);
+}
+
+/* two-column comparison/limitations grids */
+.grid-2 {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: var(--gap);
+}
+@media (max-width: 960px) {
+	.grid-2 {
+		grid-template-columns: 1fr;
+	}
+}
+
+/* tech stack chips */
+.tech-row {
+	display: flex;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+.tech-chip {
+	padding: 9px 13px;
+	background: var(--card-2);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+.tech-chip .name {
+	font-weight: 700;
+	font-size: 13px;
+	white-space: nowrap;
+	color: var(--text);
+}
+.tech-chip .note {
+	font-size: 10.5px;
+	color: var(--mute);
+}
+
+/* rookie hero — slightly more compact than the home hero.
+   Compound selector (.home-hero.rr-hero) so these overrides beat
+   the .home-hero / .home-hero h1 rules in home.css regardless of
+   stylesheet order (equal specificity would otherwise be order-dependent). */
+.home-hero.rr-hero {
+	padding: 24px 26px;
+	margin-bottom: var(--gap);
+}
+.home-hero.rr-hero h1 {
+	font-size: 24px;
+	letter-spacing: -0.3px;
+	margin: 0 0 8px;
+}
+.rr-hero .tags {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 12px;
+	flex-wrap: wrap;
+}
+.rr-hero .controls {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	flex-wrap: wrap;
+}
+.rr-hero .r2 {
+	padding-left: 14px;
+	border-left: 1px solid var(--border);
+}
+.rr-hero .r2 .lbl {
+	font-size: 11.5px;
+	color: var(--mute);
+	margin-bottom: 3px;
+}
+.rr-hero .r2 .val {
+	font-size: 13.5px;
+	font-weight: 700;
+	color: var(--text);
+}
+.rr-hero .r2 .val .pm {
+	font-weight: 500;
+	color: var(--mute);
+	margin-left: 5px;
+}
+.rr-hero .seg-label {
+	font-size: 11.5px;
+	color: var(--mute);
+	margin-bottom: 7px;
+	letter-spacing: 0.5px;
+}
