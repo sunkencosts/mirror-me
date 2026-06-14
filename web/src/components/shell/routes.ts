@@ -49,6 +49,14 @@ export const LEAGUE_ROUTES: RouteDef[] = [
 		to: (id) => `/${id}/lineups`,
 	},
 	{
+		key: "members",
+		title: "Teams",
+		scope: "league",
+		navIcon: "users",
+		navLabel: "Teams",
+		to: (id) => `/${id}/teams`,
+	},
+	{
 		key: "stats",
 		title: "League Stats",
 		scope: "league",
@@ -64,14 +72,6 @@ export const LEAGUE_ROUTES: RouteDef[] = [
 		navLabel: "Best Setters",
 		to: (id) => `/${id}/best-setters`,
 	},
-	{
-		key: "members",
-		title: "Members",
-		scope: "league",
-		navIcon: "users",
-		navLabel: "Members",
-		to: (id) => `/${id}/members`,
-	},
 ];
 
 export const ALL_ROUTES: RouteDef[] = [...GLOBAL_ROUTES, ...LEAGUE_ROUTES];
@@ -80,7 +80,7 @@ const LEAGUE_SEGMENT_TO_KEY: Record<string, string> = {
 	lineups: "lineups",
 	stats: "stats",
 	"best-setters": "setters",
-	members: "members",
+	teams: "members",
 };
 
 /** Resolve the active route key from a pathname. */

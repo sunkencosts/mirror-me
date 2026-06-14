@@ -14,7 +14,7 @@ const TIER_RING: Record<Tier, string> = {
 	D: "r-unc",
 };
 
-export default function MembersPage() {
+export default function TeamsPage() {
 	const { leagueId = "" } = useParams();
 
 	const { data: rosters = [], isLoading } = useQuery<Roster[]>({
@@ -34,7 +34,7 @@ export default function MembersPage() {
 	return (
 		<div className="fade-in">
 			<div className="panel">
-				<h4>League members</h4>
+				<h4>Teams</h4>
 				<div className="sub">{rosters.length} managers</div>
 				<div
 					className="lg-cards"

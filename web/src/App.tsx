@@ -7,7 +7,7 @@ import BestSettersPage from "./pages/BestSettersPage";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import LeagueStatsPage from "./pages/LeagueStatsPage";
 import LineupsPage from "./pages/LineupsPage";
-import MembersPage from "./pages/MembersPage";
+import TeamsPage from "./pages/TeamsPage";
 import MyLeaguesPage from "./pages/MyLeaguesPage";
 import RookieRankingsPage from "./pages/RookieRankingsPage";
 
@@ -33,7 +33,7 @@ export const router = createBrowserRouter([
 					{ path: ":leagueId/lineups", element: <LineupsPage /> },
 					{ path: ":leagueId/stats", element: <LeagueStatsPage /> },
 					{ path: ":leagueId/best-setters", element: <BestSettersPage /> },
-					{ path: ":leagueId/members", element: <MembersPage /> },
+					{ path: ":leagueId/teams", element: <TeamsPage /> },
 				],
 			},
 
