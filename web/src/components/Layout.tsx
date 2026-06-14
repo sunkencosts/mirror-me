@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Outlet, useLocation } from "react-router";
+import { Outlet, ScrollRestoration, useLocation } from "react-router";
 import { deleteJson } from "../api";
 import { useAuth } from "../context/AuthContext";
 import BottomTabs from "./shell/BottomTabs";
@@ -54,6 +54,7 @@ export default function Layout() {
 				</div>
 				<BottomTabs onOpenDrawer={openDrawer} />
 			</div>
+			<ScrollRestoration />
 		</>
 	);
 }
