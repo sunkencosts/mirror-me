@@ -690,6 +690,12 @@
 .bench-list {
 	padding: 4px 0 8px;
 }
+.bench-row {
+	padding: 7px 16px;
+}
+.bench-row + .bench-row {
+	border-top: 1px solid #ffffff06;
+}
 .bench-sublabel {
 	font-size: 10px;
 	font-weight: 700;
