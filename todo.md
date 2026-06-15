@@ -1,10 +1,10 @@
 # Next
 # FE
-- Incorporate my ML rookie rankings
+- Do a review of the Rankings and see if it tells a good ML story.
+- The mobile footer doesn't go to the bottom when the safari footer dissappears during scrolling.
 - Use the Frontend_redesign to help fill out the placeholder pages.
 - Use sleeper historical data to test.
 - figure out a better way to rank teams
-- memebers page - add the rarity ranking thing
 - members page see if it's possible to get their avatar
 
 # Pages
@@ -18,3 +18,4 @@
 - favicon.ico (legacy browsers, currently only have favicon.svg)
 - apple-touch-icon.png (180x180) for iOS home screen
 - PNG icons for site.webmanifest (192x192, 512x512) for Android/PWA install
+yo
