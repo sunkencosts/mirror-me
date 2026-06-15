@@ -1,11 +1,8 @@
 # Next
 # FE
 - Do a review of the Rankings and see if it tells a good ML story.
-- The mobile footer doesn't go to the bottom when the safari footer dissappears during scrolling.
-- Use the Frontend_redesign to help fill out the placeholder pages.
-- Use sleeper historical data to test.
-- figure out a better way to rank teams
 - members page see if it's possible to get their avatar
+- Need to actually start tracking good vs bad managers
 
 # Pages
 - Some type of stats page for the league? 

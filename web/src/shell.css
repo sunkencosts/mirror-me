@@ -12,6 +12,10 @@
 	display: grid;
 	grid-template-columns: var(--side-w) 1fr;
 	min-height: 100vh;
+	/* dvh tracks the dynamic viewport (mobile Safari toolbar show/hide);
+	   without it the fixed bottom nav can end up ~the toolbar's height
+	   above the true bottom edge once the toolbar collapses on scroll */
+	min-height: 100dvh;
 }
 
 /* ---- sidebar ---- */
