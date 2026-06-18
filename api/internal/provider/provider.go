@@ -232,15 +232,28 @@ type CompareResponse struct {
 }
 
 type Lineup struct {
-	ID         string    `json:"id"`
-	UserID     string    `json:"user_id"`
-	LeagueID   string    `json:"league_id"`
-	RosterID   int       `json:"roster_id"`
-	WeekNumber int       `json:"week_number"`
-	Source     string    `json:"source"`
-	Starters   []string  `json:"starters"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ID         string     `json:"id"`
+	UserID     string     `json:"user_id"`
+	LeagueID   string     `json:"league_id"`
+	RosterID   int        `json:"roster_id"`
+	WeekNumber int        `json:"week_number"`
+	Season     string     `json:"season"`
+	Source     string     `json:"source"`
+	Starters   []string   `json:"starters"`
+	Locked     bool       `json:"locked"`
+	LocksAt    *time.Time `json:"locks_at,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
+}
+
+// WeekMatchupsResponse envelopes the week's matchups together with the lock state
+// for that (season, week). It is the lineup editor's source of truth for whether
+// edits are still allowed. Locked is true once now() >= LocksAt; LocksAt is nil when
+// no week_locks row has been seeded (fail open — not locked).
+type WeekMatchupsResponse struct {
+	Locked   bool          `json:"locked"`
+	LocksAt  *time.Time    `json:"locks_at,omitempty"`
+	Matchups []WeekMatchup `json:"matchups"`
 }
 type UserLeague struct {
 	UserID    string    `json:"user_id"`

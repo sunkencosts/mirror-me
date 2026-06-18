@@ -45,6 +45,8 @@ export interface Lineup {
 	id: string;
 	roster_id: number;
 	starters: string[];
+	locked?: boolean;
+	locks_at?: string;
 }
 
 export interface LeagueConfig {
@@ -63,6 +65,16 @@ export interface WeekMatchup {
 	players: Player[];
 	starters: Player[];
 	player_points: Record<string, number>;
+}
+
+// Envelope returned by GET /league/:leagueId/week/:week. `locked` is true once the
+// week's first game has kicked off; `locks_at` is that kickoff time (UTC, omitted
+// when no lock is seeded). This is the lineup editor's source of truth for whether
+// edits are still allowed.
+export interface WeekMatchupsResponse {
+	locked: boolean;
+	locks_at?: string;
+	matchups: WeekMatchup[];
 }
 
 export interface AuthUser {

@@ -3,6 +3,7 @@
 - Do a review of the Rankings and see if it tells a good ML story.
 - members page see if it's possible to get their avatar
 - Need to actually start tracking good vs bad managers
+- Login/signup is hard to find for a first time user
 
 # Pages
 - Some type of stats page for the league? 

@@ -19,6 +19,7 @@ interface Props {
 	currentWeek: number;
 	userId: string;
 	lineups: Lineup[];
+	locked: boolean;
 	isDismissed: boolean;
 	onToggleDismiss: () => void;
 }
@@ -29,6 +30,7 @@ interface StarterRowProps {
 	overridePlayer: Player | null;
 	isPickerOpen: boolean;
 	eligiblePicks: Player[];
+	locked: boolean;
 	onTogglePicker: () => void;
 	onPickOverride: (player: Player) => void;
 	onClearOverride: () => void;
@@ -43,6 +45,7 @@ function StarterRow({
 	overridePlayer,
 	isPickerOpen,
 	eligiblePicks,
+	locked,
 	onTogglePicker,
 	onPickOverride,
 	onClearOverride,
@@ -84,14 +87,22 @@ function StarterRow({
 
 			<div className="your-cell">
 				{isOverridden ? (
-					<button
-						type="button"
-						className="your-pick-btn"
-						onClick={onClearOverride}
-						title="Click to remove override"
-					>
-						<PlayerCard player={overridePlayer} reversed points={overridePoints} />
-					</button>
+					locked ? (
+						<div className="your-pick-locked">
+							<PlayerCard player={overridePlayer} reversed points={overridePoints} />
+						</div>
+					) : (
+						<button
+							type="button"
+							className="your-pick-btn"
+							onClick={onClearOverride}
+							title="Click to remove override"
+						>
+							<PlayerCard player={overridePlayer} reversed points={overridePoints} />
+						</button>
+					)
+				) : locked ? (
+					<span className="locked-slot muted">—</span>
 				) : (
 					<>
 						<button type="button" className="override-btn" onClick={onTogglePicker}>
@@ -135,6 +146,7 @@ export default function RosterCard({
 	currentWeek,
 	userId,
 	lineups,
+	locked,
 	isDismissed,
 	onToggleDismiss,
 }: Props) {
@@ -152,6 +164,7 @@ export default function RosterCard({
 		diff,
 		winner,
 		hasOverrides,
+		weekComplete,
 		overrides,
 		bench,
 		eligiblePicksBySlot,
@@ -171,17 +184,34 @@ export default function RosterCard({
 		leagueId,
 		weekNumber,
 		currentWeek,
+		locked,
 	});
 
 	function getPoints(playerId: string) {
 		return weekHasScoring ? (playerPoints[playerId] ?? 0) : undefined;
 	}
 
-	const verdictClass = winner === "user" ? "win" : winner === "official" ? "lose" : "tie";
-	const verdictText = winner ? { user: "You Win", official: "You Lose", tie: "Tie" }[winner] : "";
 	const showVerdict = hasOverrides && winner !== null;
+	// A win/lose verdict is only declared once the week is final. While the current
+	// week is still live, show a neutral "LIVE" label with the running diff instead.
+	const verdictClass = !weekComplete
+		? "live"
+		: winner === "user"
+			? "win"
+			: winner === "official"
+				? "lose"
+				: "tie";
+	const verdictText = !weekComplete
+		? "LIVE"
+		: winner
+			? { user: "You Win", official: "You Lose", tie: "Tie" }[winner]
+			: "";
 	const yourScoreColor =
-		winner === "user" ? "var(--win)" : winner === "official" ? "var(--lose)" : undefined;
+		weekComplete && winner === "user"
+			? "var(--win)"
+			: weekComplete && winner === "official"
+				? "var(--lose)"
+				: undefined;
 
 	return (
 		<div className={`team${isDismissed ? " dismissed" : ""}`}>
@@ -233,7 +263,15 @@ export default function RosterCard({
 
 					<div className="roster-head">
 						<span className="o">Official</span>
-						<span className="y">Your Pick</span>
+						<span className="y">
+							Your Pick
+							{locked && (
+								<span className="lock-chip" title="Lineups locked at kickoff">
+									<Icon name="lock" />
+									Locked
+								</span>
+							)}
+						</span>
 					</div>
 
 					{showAuthPrompt && (
@@ -254,6 +292,7 @@ export default function RosterCard({
 								overridePlayer={overridePlayer}
 								isPickerOpen={selectedIndex === i}
 								eligiblePicks={eligiblePicksBySlot[i]}
+								locked={locked}
 								onTogglePicker={() => handleTogglePicker(i)}
 								onPickOverride={(player) => handlePickOverride(i, player)}
 								onClearOverride={() => handleClearOverride(i)}

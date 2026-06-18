@@ -198,7 +198,7 @@ func newTestServer(t *testing.T, externalAPIHandler http.Handler) string {
 
 **TDD rule:** All new endpoints require TDD — write the failing tests first, then implement until they pass.
 
-**`TestMain` / `newTestServer` must TRUNCATE every table** that tests write to. Current list: `lineups`, `players`, `league_bookmarks`. Add new tables here when you add them.
+**`TestMain` / `newTestServer` must TRUNCATE every table** that tests write to. Current list: `lineups`, `players`, `league_bookmarks`, `week_locks`. Add new tables here when you add them.
 
 **New-endpoint checklist** — follow this sequence every time:
 1. Migration (`api/migrations/000001_init.up.sql`)

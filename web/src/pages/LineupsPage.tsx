@@ -9,7 +9,14 @@ import RosterCard from "../components/RosterCard";
 import { useAuth } from "../context/AuthContext";
 import { useDismissed } from "../hooks/useDismissed";
 import { computePowerScore } from "../scoring";
-import type { League, LeagueBookmark, LeagueConfig, Lineup, Roster, WeekMatchup } from "../types";
+import type {
+	League,
+	LeagueBookmark,
+	LeagueConfig,
+	Lineup,
+	Roster,
+	WeekMatchupsResponse,
+} from "../types";
 import styles from "./LineupsPage.module.css";
 
 export default function LineupsPage() {
@@ -37,14 +44,16 @@ export default function LineupsPage() {
 		throwOnError: true,
 	});
 
-	const { data: weekMatchups = [], isLoading: weekMatchupsLoading } = useQuery<WeekMatchup[]>({
+	const { data: weekData, isLoading: weekMatchupsLoading } = useQuery<WeekMatchupsResponse>({
 		queryKey: ["week-matchups", leagueId, weekNumber],
 		queryFn: () => fetchJson(`/league/${leagueId}/week/${weekNumber}`),
-		select: (data) => data ?? [],
 		placeholderData: keepPreviousData,
 		enabled: !!leagueId,
 		retry: false,
 	});
+
+	const weekMatchups = weekData?.matchups ?? [];
+	const weekLocked = weekData?.locked ?? false;
 
 	const matchupByRosterId = useMemo(
 		() => new Map(weekMatchups.map((m) => [m.roster_id, m])),
@@ -188,6 +197,7 @@ export default function LineupsPage() {
 					lineups={lineups}
 					weekNumber={weekNumber}
 					currentWeek={league!.settings.leg}
+					locked={weekLocked}
 					isDismissed={isDismissed}
 					onToggleDismiss={() => handleToggleDismiss(roster.roster_id)}
 				/>

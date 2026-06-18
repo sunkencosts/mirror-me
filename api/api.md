@@ -104,21 +104,12 @@ Create a new lineup for a user.
 - `source` — required; identifies who submitted the lineup (e.g. `"mirror"`, `"user"`)
 - `starters` — all player IDs must belong to the specified roster
 
-**Response** `201 Created`
-```json
-{
-  "id": "uuid",
-  "user_id": "uuid",
-  "league_id": "string",
-  "roster_id": 1,
-  "week_number": 1,
-  "source": "string",
-  "starters": ["player_id"],
-  "created_at": "RFC3339",
-  "updated_at": "RFC3339"
-}
-```
+**Response** `201 Created` — a `Lineup` (see Shared Types).
 Sets `Location: /lineups/{id}` header.
+
+**409 Conflict** — `lineup locked` if the week's first game has already kicked off.
+The lock is enforced server-side; see `GET /league/{leagueId}/week/{week}` for the
+lock state the UI uses to disable editing.
 
 ---
 
@@ -138,7 +129,9 @@ Update the starters for an existing lineup.
 - `user_id` must match the lineup's owner or `403 Forbidden` is returned
 - `starters` validated against the roster on the existing lineup
 
-**Response** `200 OK` — same shape as `POST /lineups`
+**Response** `200 OK` — a `Lineup` (see Shared Types).
+
+**409 Conflict** — `lineup locked` if the week has already locked at first kickoff.
 
 ---
 
@@ -206,6 +199,29 @@ Fetch all rosters for a league from Sleeper.
 
 ---
 
+### `GET /league/{leagueId}/week/{week}`
+Fetch each team's matchup for a week, enveloped with the lock state for that week.
+
+**Path params**
+- `leagueId` — Sleeper league ID
+- `week` — NFL week number (≥ 1)
+
+**Response** `200 OK`
+```json
+{
+  "locked": false,
+  "locks_at": "RFC3339",
+  "matchups": [{ /* WeekMatchup */ }]
+}
+```
+- `locked` — true once `now >= locks_at` (the week's first kickoff)
+- `locks_at` — kickoff of the week's first game (UTC); omitted when no lock is seeded
+  for the league's season + week (treated as not locked, fail open)
+
+This is the lineup editor's source of truth for whether edits are still allowed.
+
+---
+
 ## Admin
 
 ### `POST /admin/sync-players`
@@ -266,9 +282,15 @@ Pings the database. Used by the server's `waitForReady` check in tests and by lo
   "league_id": "string",
   "roster_id": 1,
   "week_number": 1,
+  "season": "2025",
   "source": "string",
   "starters": ["player_id"],
+  "locked": false,
+  "locks_at": "RFC3339",
   "created_at": "RFC3339",
   "updated_at": "RFC3339"
 }
 ```
+- `season` — derived from the league at create time (immutable per `league_id`)
+- `locked` — true once the week's first kickoff has passed; populated on reads
+- `locks_at` — kickoff of the week's first game (UTC); omitted when no lock is seeded

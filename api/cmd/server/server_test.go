@@ -60,7 +60,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatalf("TestMain: connect test db: %v", err)
 	}
-	if _, err := pool.Exec(ctx, "TRUNCATE users, lineups, players, league_bookmarks RESTART IDENTITY CASCADE"); err != nil {
+	if _, err := pool.Exec(ctx, "TRUNCATE users, lineups, players, league_bookmarks, week_locks RESTART IDENTITY CASCADE"); err != nil {
 		log.Fatalf("TestMain: truncate: %v", err)
 	}
 	if err := db.NewStore(pool).UpsertPlayers(ctx, testPlayers); err != nil {
@@ -78,7 +78,7 @@ func newTestServer(t *testing.T, sleeperHandler http.Handler, extraEnv ...map[st
 	if err != nil {
 		t.Fatalf("newTestServer: connect db: %v", err)
 	}
-	if _, err := pool.Exec(context.Background(), "TRUNCATE users, lineups, players, league_bookmarks"); err != nil {
+	if _, err := pool.Exec(context.Background(), "TRUNCATE users, lineups, players, league_bookmarks, week_locks"); err != nil {
 		t.Fatalf("newTestServer: truncate: %v", err)
 	}
 	if err := db.NewStore(pool).UpsertPlayers(context.Background(), testPlayers); err != nil {
@@ -785,6 +785,8 @@ func TestSyncPlayers_Unauthorized(t *testing.T) {
 func lineupSleeperHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/league/test-league":
+			json.NewEncoder(w).Encode(map[string]any{"league_id": "test-league", "name": "Test League", "season": "2025"})
 		case "/league/test-league/matchups/1":
 			json.NewEncoder(w).Encode([]map[string]any{
 				{"roster_id": 1, "matchup_id": 1, "players": []string{"111", "222", "333"}, "starters": []string{"111"}, "points": 0.0},
@@ -1052,6 +1054,8 @@ func TestListLineups_Empty(t *testing.T) {
 func TestGetWeekMatchups(t *testing.T) {
 	baseURL := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/league/abc":
+			json.NewEncoder(w).Encode(map[string]any{"league_id": "abc", "name": "Test League", "season": "2025"})
 		case "/league/abc/matchups/8":
 			json.NewEncoder(w).Encode([]map[string]any{
 				{"roster_id": 1, "matchup_id": 1, "players": []string{"111", "222"}, "starters": []string{"111"}, "points": 95.5, "custom_points": nil, "players_points": map[string]float64{"111": 22.4, "222": 8.1}},
@@ -1079,10 +1083,11 @@ func TestGetWeekMatchups(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
-	var matchups []provider.WeekMatchup
-	if err := json.NewDecoder(resp.Body).Decode(&matchups); err != nil {
+	var envelope provider.WeekMatchupsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
+	matchups := envelope.Matchups
 	if len(matchups) != 2 {
 		t.Fatalf("expected 2 matchups, got %d", len(matchups))
 	}
@@ -1143,6 +1148,8 @@ func TestGetWeekMatchups_ZeroWeek(t *testing.T) {
 func compareSleeperHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/league/abc":
+			json.NewEncoder(w).Encode(map[string]any{"league_id": "abc", "name": "Test League", "season": "2025"})
 		case "/league/abc/matchups/8":
 			json.NewEncoder(w).Encode([]map[string]any{
 				{
@@ -1270,6 +1277,254 @@ func TestCompareLineup_MissingUserID(t *testing.T) {
 
 func noopHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+}
+
+// seedWeekLock upserts a week_locks row so a test can control whether a given
+// (season, week) is locked. Pass a past locksAt to assert writes are rejected,
+// or a future locksAt to assert they are allowed.
+func seedWeekLock(t *testing.T, season string, week int, locksAt time.Time) {
+	t.Helper()
+	pool, err := pgxpool.New(context.Background(), testDatabaseURL)
+	if err != nil {
+		t.Fatalf("seedWeekLock: connect db: %v", err)
+	}
+	defer pool.Close()
+	_, err = pool.Exec(context.Background(),
+		`INSERT INTO week_locks (season, week, locks_at) VALUES ($1, $2, $3)
+		 ON CONFLICT (season, week) DO UPDATE SET locks_at = EXCLUDED.locks_at`,
+		season, week, locksAt)
+	if err != nil {
+		t.Fatalf("seedWeekLock: insert: %v", err)
+	}
+}
+
+// weekLockMatchupHandler serves league "abc" for week 8 (league object, matchups,
+// rosters, users) so the week-matchups envelope + lock state can be asserted.
+func weekLockMatchupHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/league/abc":
+			json.NewEncoder(w).Encode(map[string]any{"league_id": "abc", "name": "Test League", "season": "2025"})
+		case "/league/abc/matchups/8":
+			json.NewEncoder(w).Encode([]map[string]any{
+				{"roster_id": 1, "matchup_id": 1, "players": []string{"111", "222"}, "starters": []string{"111"}, "points": 95.5},
+			})
+		case "/league/abc/rosters":
+			json.NewEncoder(w).Encode([]map[string]any{
+				{"roster_id": 1, "owner_id": "u1", "players": []string{"111", "222"}, "starters": []string{"111"}},
+			})
+		case "/league/abc/users":
+			json.NewEncoder(w).Encode([]map[string]any{
+				{"user_id": "u1", "metadata": map[string]string{"team_name": "Team One"}},
+			})
+		}
+	})
+}
+
+func TestCreateLineup_RejectedAfterLock(t *testing.T) {
+	baseURL := newTestServer(t, lineupSleeperHandler())
+	token := signTestJWT(testUserID, "test@example.com", "test_user")
+	seedWeekLock(t, "2025", 1, time.Now().Add(-time.Hour))
+
+	body := `{"source":"sleeper","league_id":"test-league","roster_id":1,"week_number":1,"starters":["111","222"]}`
+	resp, err := http.DefaultClient.Do(authedJSONRequest(http.MethodPost, baseURL+"/lineups", token, body))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("expected 409 after lock, got %d", resp.StatusCode)
+	}
+
+	// Nothing should have been persisted.
+	listResp, err := http.Get(baseURL + "/lineups?user_id=" + testUserID + "&league_id=test-league&week_number=1")
+	if err != nil {
+		t.Fatalf("list request failed: %v", err)
+	}
+	defer listResp.Body.Close()
+	var lineups []provider.Lineup
+	if err := json.NewDecoder(listResp.Body).Decode(&lineups); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if len(lineups) != 0 {
+		t.Errorf("expected no lineup persisted after locked create, got %d", len(lineups))
+	}
+}
+
+func TestCreateLineup_AllowedBeforeLock(t *testing.T) {
+	baseURL := newTestServer(t, lineupSleeperHandler())
+	token := signTestJWT(testUserID, "test@example.com", "test_user")
+	seedWeekLock(t, "2025", 1, time.Now().Add(time.Hour))
+
+	body := `{"source":"sleeper","league_id":"test-league","roster_id":1,"week_number":1,"starters":["111","222"]}`
+	resp, err := http.DefaultClient.Do(authedJSONRequest(http.MethodPost, baseURL+"/lineups", token, body))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201 before lock, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateLineup_StoresDerivedSeason(t *testing.T) {
+	baseURL := newTestServer(t, lineupSleeperHandler())
+	token := signTestJWT(testUserID, "test@example.com", "test_user")
+
+	lineup := createTestLineup(t, baseURL, token)
+	if lineup.Season != "2025" {
+		t.Errorf("expected season %q derived from league, got %q", "2025", lineup.Season)
+	}
+}
+
+func TestUpdateLineup_RejectedAfterLock(t *testing.T) {
+	baseURL := newTestServer(t, lineupSleeperHandler())
+	token := signTestJWT(testUserID, "test@example.com", "test_user")
+	seedWeekLock(t, "2025", 1, time.Now().Add(time.Hour))
+	created := createTestLineup(t, baseURL, token)
+
+	// Week locks (kickoff passes).
+	seedWeekLock(t, "2025", 1, time.Now().Add(-time.Hour))
+
+	body := `{"starters":["111","333"]}`
+	resp, err := http.DefaultClient.Do(authedJSONRequest(http.MethodPatch, baseURL+"/lineups/"+created.ID, token, body))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("expected 409 after lock, got %d", resp.StatusCode)
+	}
+
+	// Starters must be unchanged.
+	getResp, err := http.Get(baseURL + "/lineups/" + created.ID)
+	if err != nil {
+		t.Fatalf("get request failed: %v", err)
+	}
+	defer getResp.Body.Close()
+	var lineup provider.Lineup
+	if err := json.NewDecoder(getResp.Body).Decode(&lineup); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if len(lineup.Starters) != 2 || lineup.Starters[0] != "111" || lineup.Starters[1] != "222" {
+		t.Errorf("expected starters unchanged after rejected update, got %v", lineup.Starters)
+	}
+}
+
+func TestUpdateLineup_AllowedBeforeLock(t *testing.T) {
+	baseURL := newTestServer(t, lineupSleeperHandler())
+	token := signTestJWT(testUserID, "test@example.com", "test_user")
+	seedWeekLock(t, "2025", 1, time.Now().Add(time.Hour))
+	created := createTestLineup(t, baseURL, token)
+
+	body := `{"starters":["111","333"]}`
+	resp, err := http.DefaultClient.Do(authedJSONRequest(http.MethodPatch, baseURL+"/lineups/"+created.ID, token, body))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 before lock, got %d", resp.StatusCode)
+	}
+}
+
+func TestWeekMatchups_EnvelopeLockedTrue(t *testing.T) {
+	baseURL := newTestServer(t, weekLockMatchupHandler())
+	seedWeekLock(t, "2025", 8, time.Now().Add(-time.Hour))
+
+	resp, err := http.Get(baseURL + "/league/abc/week/8")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var envelope provider.WeekMatchupsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if !envelope.Locked {
+		t.Error("expected locked=true after kickoff")
+	}
+	if envelope.LocksAt == nil {
+		t.Error("expected locks_at to be set")
+	}
+	if len(envelope.Matchups) != 1 {
+		t.Errorf("expected 1 matchup in envelope, got %d", len(envelope.Matchups))
+	}
+}
+
+func TestWeekMatchups_EnvelopeLockedFalse(t *testing.T) {
+	baseURL := newTestServer(t, weekLockMatchupHandler())
+	seedWeekLock(t, "2025", 8, time.Now().Add(time.Hour))
+
+	resp, err := http.Get(baseURL + "/league/abc/week/8")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var envelope provider.WeekMatchupsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if envelope.Locked {
+		t.Error("expected locked=false before kickoff")
+	}
+	if envelope.LocksAt == nil {
+		t.Error("expected locks_at to be set even when not yet locked")
+	}
+}
+
+func TestWeekMatchups_EnvelopeNoRow(t *testing.T) {
+	baseURL := newTestServer(t, weekLockMatchupHandler())
+	// No week_locks row seeded — fail open.
+
+	resp, err := http.Get(baseURL + "/league/abc/week/8")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var envelope provider.WeekMatchupsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if envelope.Locked {
+		t.Error("expected locked=false when no lock row seeded")
+	}
+	if envelope.LocksAt != nil {
+		t.Errorf("expected locks_at nil when no lock row, got %v", envelope.LocksAt)
+	}
+}
+
+func TestLineupRead_EchoesLocked(t *testing.T) {
+	baseURL := newTestServer(t, lineupSleeperHandler())
+	token := signTestJWT(testUserID, "test@example.com", "test_user")
+	seedWeekLock(t, "2025", 1, time.Now().Add(time.Hour))
+	created := createTestLineup(t, baseURL, token)
+
+	// Week locks.
+	seedWeekLock(t, "2025", 1, time.Now().Add(-time.Hour))
+
+	resp, err := http.Get(baseURL + "/lineups/" + created.ID)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	var lineup provider.Lineup
+	if err := json.NewDecoder(resp.Body).Decode(&lineup); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if !lineup.Locked {
+		t.Error("expected lineup read to echo locked=true after kickoff")
+	}
 }
 
 func saveTestUserLeague(t *testing.T, baseURL, userID, leagueID, source, label string) provider.UserLeague {

@@ -41,6 +41,9 @@ func run(ctx context.Context, getenv func(string) string, stdout, stderr io.Writ
 	if err != nil {
 		return fmt.Errorf("initializing logger: %w", err)
 	}
+	// Make the configured logger the slog default so handlers can log (e.g. the
+	// fail-open warning when a week_locks row is missing) without threading it through.
+	slog.SetDefault(logger)
 	defer func() {
 		if err := closeLog(); err != nil {
 			fmt.Fprintf(stderr, "closing log: %v\n", err)

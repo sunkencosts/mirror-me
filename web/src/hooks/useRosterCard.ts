@@ -16,6 +16,7 @@ interface Params {
 	leagueId: string;
 	weekNumber: number;
 	currentWeek: number;
+	locked: boolean;
 }
 
 export function useRosterCard({
@@ -27,6 +28,7 @@ export function useRosterCard({
 	leagueId,
 	weekNumber,
 	currentWeek,
+	locked,
 }: Params) {
 	const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 	const [showAuthPrompt, setShowAuthPrompt] = useState(false);
@@ -40,6 +42,10 @@ export function useRosterCard({
 	const isCurrentWeek = weekNumber === currentWeek;
 	const activeReserve = isCurrentWeek ? roster.reserve : EMPTY_PLAYERS;
 	const activeTaxi = isCurrentWeek ? roster.taxi : EMPTY_PLAYERS;
+
+	// A past week is final, so a win/lose verdict is real. The current week's scores
+	// are still live (we have no "games complete" signal), so it stays provisional.
+	const weekComplete = weekNumber < currentWeek;
 
 	const existingLineup = useMemo(
 		() => lineups.find((l) => l.roster_id === roster.roster_id) ?? null,
@@ -119,7 +125,7 @@ export function useRosterCard({
 	const isSaving = saveStatus === "saving";
 
 	function handleTogglePicker(i: number) {
-		if (isSaving) {
+		if (isSaving || locked) {
 			return;
 		}
 		if (!isAuthenticated) {
@@ -131,7 +137,7 @@ export function useRosterCard({
 	}
 
 	function handlePickOverride(i: number, player: Player) {
-		if (isSaving) {
+		if (isSaving || locked) {
 			return;
 		}
 		applyOverride(i, player);
@@ -139,7 +145,7 @@ export function useRosterCard({
 	}
 
 	function handleClearOverride(i: number) {
-		if (isSaving) {
+		if (isSaving || locked) {
 			return;
 		}
 		applyOverride(i, null);
@@ -161,6 +167,7 @@ export function useRosterCard({
 		diff,
 		winner,
 		hasOverrides,
+		weekComplete,
 		overrides,
 		bench,
 		eligiblePicksBySlot,

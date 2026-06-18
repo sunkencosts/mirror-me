@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { patchJson, postJson } from "../api";
+import { ApiError, patchJson, postJson } from "../api";
 import type { Lineup, Player } from "../types";
 
 interface Params {
@@ -104,6 +104,14 @@ export function useLineup({
 			queryClient.setQueryData(queryKey, (old: Lineup[] | undefined) =>
 				old ? old.map((l) => (l.id === data.id ? data : l)) : [data],
 			);
+		},
+		onError: (error) => {
+			// Defensive: the UI disables editing once locked, but if a save races past
+			// kickoff the server returns 409. Refetch the week so its lock state flips
+			// to true and the editor disables itself.
+			if (error instanceof ApiError && error.status === 409) {
+				queryClient.invalidateQueries({ queryKey: ["week-matchups", leagueId, weekNumber] });
+			}
 		},
 	});
 
