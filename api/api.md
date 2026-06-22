@@ -6,9 +6,54 @@ Base path: `/`
 
 ---
 
+## Auth
+
+Cookie-based Google OAuth. A successful login sets an `auth_token` JWT cookie
+(httpOnly, 30-day max-age). Routes marked **auth required** read the JWT via the
+`RequireAuth` middleware; unauthenticated requests get `401`.
+
+### `GET /auth/google`
+Starts the OAuth flow. Sets a short-lived `oauth_state` cookie and `302`-redirects to
+Google's consent screen.
+
+### `GET /auth/google/callback`
+Google redirect target. Validates the `state` cookie, exchanges the code for the user's
+profile, creates-or-loads the user (auto-generating a handle like `bold_hawk42` for new
+users), sets the `auth_token` cookie, then `302`-redirects to `FRONTEND_URL`.
+
+### `GET /auth/me` — auth required
+**Response** `200 OK`
+```json
+{ "id": "uuid", "email": "string", "username": "string" }
+```
+`401` if not authenticated.
+
+### `POST /auth/merge` — auth required
+Reassigns anonymous-ID data (lineups, bookmarks) to the logged-in user. Call once right
+after first login.
+
+**Request body**
+```json
+{ "anonymous_id": "uuid" }
+```
+**Response** `204 No Content`. `400` if `anonymous_id` is missing.
+
+### `DELETE /auth/logout`
+Clears the `auth_token` cookie.
+
+**Response** `204 No Content`.
+
+### `GET /dev/login` — development only
+Only registered when `APP_ENV=development`. Issues a valid `auth_token` without Google,
+then redirects to `FRONTEND_URL`. Used for local testing.
+
+---
+
 ## League Bookmarks
 
-A user's saved references to Sleeper leagues, with optional labels. `user_id` is a client-generated UUID stored locally by the frontend (no auth yet — will move to session in Step 3).
+A user's saved references to Sleeper leagues, with optional labels. `user_id` is a
+client-generated UUID stored locally by the frontend for anonymous use, or the
+authenticated user's id after `POST /auth/merge`. These routes are **not** behind auth.
 
 ### `POST /league-bookmarks`
 Save a league bookmark (upserts — if the league is already saved, the label is updated).
@@ -219,6 +264,44 @@ Fetch each team's matchup for a week, enveloped with the lock state for that wee
   for the league's season + week (treated as not locked, fail open)
 
 This is the lineup editor's source of truth for whether edits are still allowed.
+
+---
+
+### `GET /league/{leagueId}/week/{week}/roster/{rosterId}/compare`
+Score the user's submitted lineup against the roster's official lineup for the week,
+using Sleeper's per-player points, and declare a winner.
+
+**Path params**
+- `leagueId` — Sleeper league ID
+- `week` — NFL week number (≥ 1)
+- `rosterId` — roster within the league (≥ 1)
+
+**Query params**
+| Param | Type | Required |
+|---|---|---|
+| `user_id` | UUID | yes |
+
+**Response** `200 OK`
+```json
+{
+  "roster_id": 1,
+  "week": 1,
+  "official": {
+    "starters": [{ /* Player */, "points": 12.3 }],
+    "total_points": 110.4
+  },
+  "user": {
+    "lineup_id": "uuid",
+    "starters": [{ /* Player */, "points": 9.1 }],
+    "total_points": 118.7
+  },
+  "winner": "user"
+}
+```
+- `winner` — `"official"`, `"user"`, or `"tie"`
+- `official.total_points` uses Sleeper's `custom_points` when present, else `points`
+- **400** invalid week / roster_id, or missing `user_id`
+- **404** roster not in this week's matchups, or no lineup submitted for the week
 
 ---
 
