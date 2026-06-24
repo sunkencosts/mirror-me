@@ -36,12 +36,33 @@ CREATE TABLE week_locks(
     PRIMARY KEY (season, week)
 );
 
--- TODO(seed 2025): insert the 18 first-kickoff times for the 2025 regular season,
--- converting each week's first-game ET kickoff to UTC (watch the Nov DST fall-back).
--- Example shape (replace with real kickoff times):
---   INSERT INTO week_locks (season, week, locks_at) VALUES
---     ('2025', 1, '2025-09-05 00:20:00+00'),
---     ('2025', 2, '2025-09-12 00:15:00+00');
+-- 2026 regular-season lock times: kickoff of each week's FIRST game, stored UTC.
+-- Source: official slate via NFL.com / fbschedules.com (2026 TNF schedule). DST ends
+-- Sun Nov 1 2026, so weeks before it are EDT (UTC-4) and weeks on/after are EST (UTC-5).
+-- Week 1 is the WEDNESDAY Sep 9 opener (8:20pm ET), not the Thursday game.
+-- Weeks 2-11 and 13-17 are the standard Thursday 8:15pm ET TNF game.
+INSERT INTO week_locks (season, week, locks_at) VALUES
+    ('2026', 1,  '2026-09-10 00:20:00+00'),  -- Wed Sep 9, 8:20pm EDT  (NE @ SEA opener)
+    ('2026', 2,  '2026-09-18 00:15:00+00'),  -- Thu Sep 17, 8:15pm EDT
+    ('2026', 3,  '2026-09-25 00:15:00+00'),  -- Thu Sep 24, 8:15pm EDT
+    ('2026', 4,  '2026-10-02 00:15:00+00'),  -- Thu Oct 1,  8:15pm EDT
+    ('2026', 5,  '2026-10-09 00:15:00+00'),  -- Thu Oct 8,  8:15pm EDT
+    ('2026', 6,  '2026-10-16 00:15:00+00'),  -- Thu Oct 15, 8:15pm EDT
+    ('2026', 7,  '2026-10-23 00:15:00+00'),  -- Thu Oct 22, 8:15pm EDT
+    ('2026', 8,  '2026-10-30 00:15:00+00'),  -- Thu Oct 29, 8:15pm EDT
+    ('2026', 9,  '2026-11-06 01:15:00+00'),  -- Thu Nov 5,  8:15pm EST
+    ('2026', 10, '2026-11-13 01:15:00+00'),  -- Thu Nov 12, 8:15pm EST
+    ('2026', 11, '2026-11-20 01:15:00+00'),  -- Thu Nov 19, 8:15pm EST
+    ('2026', 13, '2026-12-04 01:15:00+00'),  -- Thu Dec 3,  8:15pm EST
+    ('2026', 14, '2026-12-11 01:15:00+00'),  -- Thu Dec 10, 8:15pm EST
+    ('2026', 15, '2026-12-18 01:15:00+00'),  -- Thu Dec 17, 8:15pm EST
+    ('2026', 16, '2026-12-25 01:15:00+00'),  -- Thu Dec 24, 8:15pm EST
+    ('2026', 17, '2027-01-01 01:15:00+00');  -- Thu Dec 31, 8:15pm EST
+-- Weeks 12 and 18 intentionally NOT seeded (fail open = unlocked) until confirmed:
+--   Week 12 = Thanksgiving week (Nov 26); first game may be a Wed game or the 1:00pm ET
+--     Thanksgiving opener — sources conflict, do not guess.
+--   Week 18 (Sat Jan 9 2027) kickoff times are flexed/TBD this far out.
+-- Fill these two rows once the real first-game kickoffs are confirmed.
 
 CREATE TABLE league_bookmarks(
     user_id text NOT NULL,
@@ -61,5 +82,25 @@ CREATE TABLE users(
     username text NOT NULL UNIQUE,
     created_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (oauth_provider, oauth_id)
+);
+
+-- week_results: the cached, graded outcome of one head-to-head week, written by the
+-- grading step once a week is final (week < CURRENT_WEEK). The leaderboards aggregate
+-- these rows (mean efficiency = avg(user_total/optimal_total), win rate, edge,
+-- weeks_played) rather than recomputing from Sleeper on every request. Idempotent upsert
+-- keyed by the lineup's identity. user_total/official_total/optimal_total are the week's
+-- points; result is the head-to-head winner (user|official|tie).
+CREATE TABLE week_results(
+    user_id text NOT NULL,
+    league_id text NOT NULL,
+    roster_id int NOT NULL,
+    week int NOT NULL,
+    season text NOT NULL,
+    user_total double precision NOT NULL,
+    official_total double precision NOT NULL,
+    optimal_total double precision NOT NULL,
+    result text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, league_id, roster_id, week, season)
 );
 

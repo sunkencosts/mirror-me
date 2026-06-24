@@ -59,10 +59,12 @@ type matchupEntry struct {
 }
 
 type Client struct {
-	baseURL     string
-	httpClient  *http.Client
-	players     playerLookup
-	currentWeek int
+	baseURL    string
+	httpClient *http.Client
+	players    playerLookup
+	// currentWeek resolves the live NFL week at call time (inferred from week_locks, or an
+	// override). Used to pick matchup cache TTL: past weeks cache longer than the live week.
+	currentWeek func(context.Context) int
 
 	rosterMu    sync.RWMutex
 	rosterCache map[string]rosterCacheEntry
@@ -75,7 +77,7 @@ type playerLookup interface {
 	GetPlayersByIDs(ctx context.Context, ids []string) (map[string]provider.Player, error)
 }
 
-func New(baseURL string, players playerLookup, currentWeek int) *Client {
+func New(baseURL string, players playerLookup, currentWeek func(context.Context) int) *Client {
 	return &Client{
 		baseURL:      baseURL,
 		httpClient:   &http.Client{},
@@ -262,7 +264,7 @@ func (c *Client) fetchRosters(ctx context.Context, leagueID string) ([]provider.
 func (c *Client) GetWeekMatchups(ctx context.Context, leagueID string, week int) ([]provider.WeekMatchup, error) {
 	cacheKey := leagueID + "/" + strconv.Itoa(week)
 	ttl := matchupCacheTTLCurrent
-	if week < c.currentWeek {
+	if week < c.currentWeek(ctx) {
 		ttl = matchupCacheTTLHistorical
 	}
 

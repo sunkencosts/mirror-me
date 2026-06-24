@@ -1,5 +1,11 @@
 # mirrorleague
 
+> **Current-state reference:** see `OVERVIEW.md` for an accurate, code-derived snapshot of
+> what the app does today (routes, lock system, scoring, frontend pages, build status).
+> Read it before working on a feature. This file (CLAUDE.md) is the source of truth for
+> *patterns and conventions*; `OVERVIEW.md` is the source of truth for *current
+> capabilities* — keep it updated as features land.
+
 ## Project Overview
 A fantasy football "mirror" app where users can import a celebrity or public figure's Sleeper fantasy football team and set their own lineup using the same roster — then compare scores to prove they're a better fantasy manager.
 
@@ -16,13 +22,17 @@ A fantasy football "mirror" app where users can import a celebrity or public fig
 ---
 
 ## Current Status
-- [ ] Step 1 — Mirror a league (in progress)
-  - [x] `GET /league/:leagueId/rosters` — returns rosters with resolved player names, team name, and player image URLs
-  - [ ] `GET /user/:username` — returns user object + their leagues
-  - [ ] `GET /league/:leagueId/week/:week` — returns each team's lineup for that week
-- [ ] Step 2 — Reaction layer (votes, predictions)
-- [ ] Step 3 — User accounts + lineup picks
-- [ ] Step 4 — Scoring and winner declaration
+
+> Full, per-capability build status lives in `OVERVIEW.md`. High-level summary:
+
+- [x] Step 1 — Mirror a league: rosters, league metadata, and week matchups all served
+- [~] Step 2 — Reaction layer: not built (no votes/predictions yet)
+- [x] Step 3 — User accounts + lineup picks: Google OAuth + JWT cookie, anonymous→account
+  merge, persisted lineups, kickoff lock enforcement (`week_locks`)
+- [x] Step 4 — Scoring + winner: `.../compare` scores user vs official lineup using
+  Sleeper per-player points and declares a winner (Tank01/AI roast still future)
+- Frontend: My Leagues, Lineups editor, Teams, Rookie Rankings done; Global Leaderboard,
+  League Stats, and Best Setters are still stubs
 
 ---
 

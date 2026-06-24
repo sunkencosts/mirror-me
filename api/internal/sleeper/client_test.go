@@ -40,7 +40,7 @@ func TestGetRosters_teamName(t *testing.T) {
 	defer srv.Close()
 
 	lookup := &mapPlayerLookup{players: map[string]provider.Player{"111": {PlayerID: "111"}}}
-	c := New(srv.URL, lookup, 1)
+	c := New(srv.URL, lookup, func(context.Context) int { return 1 })
 
 	rosters, err := c.GetRosters(context.Background(), "abc")
 	if err != nil {

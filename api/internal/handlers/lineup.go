@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/sunkencosts/mirrorleague/internal/provider"
+	"github.com/sunkencosts/mirrorleague/internal/scoring"
 )
 
 type lineupStore interface {
@@ -104,7 +105,7 @@ func HandleCreateLineup(store lineupStore, p lineupCreateProvider) http.Handler 
 			return
 		}
 
-		if err := validateStarters(r.Context(), p, req.LeagueID, req.RosterID, req.WeekNumber, req.Starters); err != nil {
+		if err := validateStarters(r.Context(), p, req.LeagueID, req.RosterID, req.WeekNumber, league.RosterPositions, req.Starters); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -119,7 +120,7 @@ func HandleCreateLineup(store lineupStore, p lineupCreateProvider) http.Handler 
 	})
 }
 
-func HandleUpdateLineup(store lineupStore, p lineupMatchupProvider) http.Handler {
+func HandleUpdateLineup(store lineupStore, p lineupCreateProvider) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims, ok := ClaimsFromContext(r.Context())
 		if !ok {
@@ -163,7 +164,13 @@ func HandleUpdateLineup(store lineupStore, p lineupMatchupProvider) http.Handler
 			return
 		}
 
-		if err := validateStarters(r.Context(), p, existing.LeagueID, existing.RosterID, existing.WeekNumber, req.Starters); err != nil {
+		league, err := p.GetLeague(r.Context(), existing.LeagueID)
+		if err != nil {
+			http.Error(w, "failed to resolve league", http.StatusInternalServerError)
+			return
+		}
+
+		if err := validateStarters(r.Context(), p, existing.LeagueID, existing.RosterID, existing.WeekNumber, league.RosterPositions, req.Starters); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -247,14 +254,14 @@ func HandleGetLineupByID(store lineupStore) http.Handler {
 		_ = encode(w, r, http.StatusOK, lineup)
 	})
 }
-func validateStarters(ctx context.Context, p lineupMatchupProvider, leagueID string, rosterID, week int, starters []string) error {
+func validateStarters(ctx context.Context, p lineupMatchupProvider, leagueID string, rosterID, week int, rosterPositions, starters []string) error {
 	matchups, err := p.GetWeekMatchups(ctx, leagueID, week)
 	if err != nil {
 		return fmt.Errorf("fetching matchups: %w", err)
 	}
 
 	if len(matchups) == 0 {
-		// No matchup data published for this week yet — skip validation.
+		// No matchup data published for this week yet — skip validation (D17).
 		return nil
 	}
 	matchup := findMatchup(matchups, rosterID)
@@ -262,14 +269,19 @@ func validateStarters(ctx context.Context, p lineupMatchupProvider, leagueID str
 		return fmt.Errorf("roster %d not found in league for week %d", rosterID, week)
 	}
 
+	// Membership: every starter must be on this roster.
 	playerSet := make(map[string]struct{}, len(matchup.Players))
-	for _, p := range matchup.Players {
-		playerSet[p.PlayerID] = struct{}{}
+	playerPositions := make(map[string][]string, len(matchup.Players))
+	for _, player := range matchup.Players {
+		playerSet[player.PlayerID] = struct{}{}
+		playerPositions[player.PlayerID] = player.FantasyPositions
 	}
 	for _, id := range starters {
 		if _, ok := playerSet[id]; !ok {
 			return fmt.Errorf("player %s was not available for week %d", id, week)
 		}
 	}
-	return nil
+
+	// Legality: exact slot count + FLEX/SUPER_FLEX-aware position assignment + no dupes.
+	return scoring.ValidateLineup(ctx, rosterPositions, starters, playerPositions)
 }

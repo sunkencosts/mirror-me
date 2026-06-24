@@ -69,7 +69,8 @@ func run(ctx context.Context, getenv func(string) string, stdout, stderr io.Writ
 	}
 	logger.Info("database connected")
 
-	sleeperClient := sleeper.New(cfg.SleeperBaseURL, store, cfg.CurrentWeek)
+	currentWeek := newCurrentWeekResolver(store, cfg)
+	sleeperClient := sleeper.New(cfg.SleeperBaseURL, store, currentWeek)
 	googleClient := googleauth.New(googleauth.Config{
 		ClientID:     cfg.GoogleClientID,
 		ClientSecret: cfg.GoogleClientSecret,
@@ -89,7 +90,7 @@ func run(ctx context.Context, getenv func(string) string, stdout, stderr io.Writ
 		return fmt.Errorf("running migrations: %w", err)
 	}
 
-	srv := NewServer(sleeperClient, cfg, store, googleClient, logger)
+	srv := NewServer(sleeperClient, cfg, store, googleClient, logger, currentWeek)
 
 	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", ":"+cfg.Port)
 	if err != nil {
@@ -127,9 +128,34 @@ func run(ctx context.Context, getenv func(string) string, stdout, stderr io.Writ
 	return nil
 }
 
-func NewServer(sleeperClient sleeperDeps, cfg config.Config, store *db.Store, googleClient *googleauth.Client, logger *slog.Logger) http.Handler {
+// newCurrentWeekResolver returns a function that yields the live NFL week at call time.
+// A non-zero CURRENT_WEEK override (tests, manual control) wins; otherwise it is inferred
+// from week_locks + the current date and auto-advances at each week's kickoff. Falls back
+// to week 1 if inference fails or no week has kicked off yet.
+func newCurrentWeekResolver(store *db.Store, cfg config.Config) func(context.Context) int {
+	return func(ctx context.Context) int {
+		if cfg.CurrentWeek > 0 {
+			return cfg.CurrentWeek
+		}
+		week, err := store.CurrentWeekFromLocks(ctx, cfg.CurrentSeason, time.Now())
+		if err != nil {
+			// A transient inference failure silently rewinds the live week to 1 (wrong
+			// cache TTLs, Final flags, grading window). Fall back, but make it loud so it
+			// is not mistaken for genuine pre-season.
+			slog.ErrorContext(ctx, "current-week inference failed; falling back to week 1",
+				slog.String("season", cfg.CurrentSeason), slog.Any("err", err))
+			return 1
+		}
+		if week == 0 {
+			return 1 // pre-season: no week has kicked off yet
+		}
+		return week
+	}
+}
+
+func NewServer(sleeperClient sleeperDeps, cfg config.Config, store *db.Store, googleClient *googleauth.Client, logger *slog.Logger, currentWeek func(context.Context) int) http.Handler {
 	mux := http.NewServeMux()
-	addRoutes(mux, sleeperClient, store, cfg, googleClient)
+	addRoutes(mux, sleeperClient, store, cfg, googleClient, currentWeek)
 
 	var handler http.Handler = mux
 	handler = timeoutMiddleware(20 * time.Second)(handler)

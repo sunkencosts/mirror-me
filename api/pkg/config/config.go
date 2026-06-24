@@ -9,6 +9,7 @@ type Config struct {
 	DatabaseURL        string
 	MigrationsURL      string
 	CurrentWeek        int
+	CurrentSeason      string
 	AppEnv             string
 	GoogleClientID     string
 	GoogleClientSecret string
@@ -43,11 +44,18 @@ func Load(getenv func(string) string) Config {
 	if migrationsURL == "" {
 		migrationsURL = "file://migrations"
 	}
-	currentWeek := 1
+	// CurrentWeek 0 means "infer from week_locks + the current date" (the normal case).
+	// A non-zero CURRENT_WEEK is an explicit override — used by tests for determinism and
+	// available as a manual safety valve.
+	currentWeek := 0
 	if s := getenv("CURRENT_WEEK"); s != "" {
 		if n, err := strconv.Atoi(s); err == nil {
 			currentWeek = n
 		}
+	}
+	currentSeason := getenv("CURRENT_SEASON")
+	if currentSeason == "" {
+		currentSeason = "2026"
 	}
 	googleAuthURL := getenv("GOOGLE_AUTH_URL")
 	if googleAuthURL == "" {
@@ -73,6 +81,7 @@ func Load(getenv func(string) string) Config {
 		DatabaseURL:        databaseURL,
 		MigrationsURL:      migrationsURL,
 		CurrentWeek:        currentWeek,
+		CurrentSeason:      currentSeason,
 		GoogleClientID:     getenv("GOOGLE_CLIENT_ID"),
 		GoogleClientSecret: getenv("GOOGLE_CLIENT_SECRET"),
 		GoogleRedirectURL:  getenv("GOOGLE_REDIRECT_URL"),
