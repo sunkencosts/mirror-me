@@ -21,11 +21,12 @@ type sleeperDeps interface {
 }
 
 // Update api/api.md when adding or removing routes here.
-func addRoutes(mux *http.ServeMux, sleeperClient sleeperDeps, store *db.Store, cfg config.Config, googleClient *googleauth.Client) {
+func addRoutes(mux *http.ServeMux, sleeperClient sleeperDeps, store *db.Store, cfg config.Config, googleClient *googleauth.Client, currentWeek func(context.Context) int) {
 	jwtSecret := []byte(cfg.JWTSecret)
 	requireAuth := handlers.RequireAuth(jwtSecret)
 	adminMux := http.NewServeMux()
 	adminMux.Handle("POST /admin/sync-players", handlers.HandleSyncPlayers(store, sleeperClient, cfg.SleeperBaseURL, cfg.RankingsCSVURL))
+	adminMux.Handle("POST /admin/grade", handlers.HandleGradeSeason(store, sleeperClient, currentWeek))
 	mux.Handle("/admin/", handlers.RequireAdminSecret(cfg.AdminSecret)(adminMux))
 
 	mux.Handle("GET /auth/google", handlers.HandleGoogleLogin(googleClient))
@@ -48,7 +49,9 @@ func addRoutes(mux *http.ServeMux, sleeperClient sleeperDeps, store *db.Store, c
 	mux.Handle("GET /players", handlers.HandleGetPlayers(store))
 	mux.Handle("GET /league/{leagueId}/rosters", handlers.HandleGetRosters(sleeperClient))
 	mux.Handle("GET /league/{leagueId}/week/{week}", handlers.HandleGetWeekMatchups(sleeperClient, store))
-	mux.Handle("GET /league/{leagueId}/week/{week}/roster/{rosterId}/compare", handlers.HandleGetCompare(sleeperClient, store))
+	mux.Handle("GET /league/{leagueId}/week/{week}/roster/{rosterId}/compare", requireAuth(handlers.HandleGetCompare(sleeperClient, store, currentWeek)))
+	mux.Handle("GET /leaderboard", handlers.HandleGlobalLeaderboard(store, cfg.CurrentSeason))
+	mux.Handle("GET /league/{leagueId}/leaderboard", handlers.HandleLeagueLeaderboard(store, cfg.CurrentSeason))
 	mux.Handle("GET /league/{leagueId}", handlers.HandleGetLeague(sleeperClient))
 	mux.HandleFunc("GET /healthz", handleHealthz(store))
 	mux.Handle("/", spaHandler("web/dist"))

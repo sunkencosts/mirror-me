@@ -36,12 +36,35 @@ const testUserID = "00000000-0000-0000-0000-000000000001"
 
 // testPlayers is the fixed reference dataset seeded once before all tests run.
 // Use these player IDs in any Sleeper mock that needs player resolution.
+// IDs 111/222/333/444/555 are the original five (kept so existing tests still pass);
+// the rest add positional depth — multiple QB/RB/WR/TE plus K and DEF — so the fixture
+// world (fixtures_test.go) can build legal 9-slot lineups with meaningful benches.
 var testPlayers = []provider.Player{
+	// QB
 	{PlayerID: "111", FirstName: "Josh", LastName: "Allen", FantasyPositions: []string{"QB"}, Active: true},
-	{PlayerID: "222", FirstName: "Justin", LastName: "Jefferson", FantasyPositions: []string{"WR"}, Active: true},
+	{PlayerID: "112", FirstName: "Lamar", LastName: "Jackson", FantasyPositions: []string{"QB"}, Active: true},
+	{PlayerID: "113", FirstName: "Jalen", LastName: "Hurts", FantasyPositions: []string{"QB"}, Active: true},
+	// RB
 	{PlayerID: "333", FirstName: "Christian", LastName: "McCaffrey", FantasyPositions: []string{"RB"}, Active: true},
-	{PlayerID: "444", FirstName: "Travis", LastName: "Kelce", FantasyPositions: []string{"TE"}, Active: true},
+	{PlayerID: "334", FirstName: "Bijan", LastName: "Robinson", FantasyPositions: []string{"RB"}, Active: true},
+	{PlayerID: "335", FirstName: "Saquon", LastName: "Barkley", FantasyPositions: []string{"RB"}, Active: true},
+	{PlayerID: "336", FirstName: "Jahmyr", LastName: "Gibbs", FantasyPositions: []string{"RB"}, Active: true},
+	// WR
+	{PlayerID: "222", FirstName: "Justin", LastName: "Jefferson", FantasyPositions: []string{"WR"}, Active: true},
 	{PlayerID: "555", FirstName: "Tyreek", LastName: "Hill", FantasyPositions: []string{"WR"}, Active: true},
+	{PlayerID: "223", FirstName: "CeeDee", LastName: "Lamb", FantasyPositions: []string{"WR"}, Active: true},
+	{PlayerID: "224", FirstName: "Amon-Ra", LastName: "St. Brown", FantasyPositions: []string{"WR"}, Active: true},
+	{PlayerID: "225", FirstName: "A.J.", LastName: "Brown", FantasyPositions: []string{"WR"}, Active: true},
+	// TE
+	{PlayerID: "444", FirstName: "Travis", LastName: "Kelce", FantasyPositions: []string{"TE"}, Active: true},
+	{PlayerID: "445", FirstName: "Sam", LastName: "LaPorta", FantasyPositions: []string{"TE"}, Active: true},
+	{PlayerID: "446", FirstName: "Mark", LastName: "Andrews", FantasyPositions: []string{"TE"}, Active: true},
+	// K
+	{PlayerID: "711", FirstName: "Harrison", LastName: "Butker", FantasyPositions: []string{"K"}, Active: true},
+	{PlayerID: "712", FirstName: "Justin", LastName: "Tucker", FantasyPositions: []string{"K"}, Active: true},
+	// DEF
+	{PlayerID: "811", FirstName: "San Francisco", LastName: "49ers", FantasyPositions: []string{"DEF"}, Active: true},
+	{PlayerID: "812", FirstName: "Dallas", LastName: "Cowboys", FantasyPositions: []string{"DEF"}, Active: true},
 }
 
 func TestMain(m *testing.M) {
@@ -60,7 +83,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatalf("TestMain: connect test db: %v", err)
 	}
-	if _, err := pool.Exec(ctx, "TRUNCATE users, lineups, players, league_bookmarks, week_locks RESTART IDENTITY CASCADE"); err != nil {
+	if _, err := pool.Exec(ctx, "TRUNCATE users, lineups, players, league_bookmarks, week_locks, week_results RESTART IDENTITY CASCADE"); err != nil {
 		log.Fatalf("TestMain: truncate: %v", err)
 	}
 	if err := db.NewStore(pool).UpsertPlayers(ctx, testPlayers); err != nil {
@@ -78,7 +101,7 @@ func newTestServer(t *testing.T, sleeperHandler http.Handler, extraEnv ...map[st
 	if err != nil {
 		t.Fatalf("newTestServer: connect db: %v", err)
 	}
-	if _, err := pool.Exec(context.Background(), "TRUNCATE users, lineups, players, league_bookmarks, week_locks"); err != nil {
+	if _, err := pool.Exec(context.Background(), "TRUNCATE users, lineups, players, league_bookmarks, week_locks, week_results"); err != nil {
 		t.Fatalf("newTestServer: truncate: %v", err)
 	}
 	if err := db.NewStore(pool).UpsertPlayers(context.Background(), testPlayers); err != nil {
@@ -179,6 +202,13 @@ func authedJSONRequest(method, url, token, body string) *http.Request {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	return req
+}
+
+// authedGet issues a GET with a Bearer token (for requireAuth-protected reads like compare).
+func authedGet(token, url string) (*http.Response, error) {
+	req, _ := http.NewRequest(http.MethodGet, url, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	return http.DefaultClient.Do(req)
 }
 
 // doGoogleLogin drives the full OAuth callback flow against a test server and
@@ -1197,7 +1227,7 @@ func TestCompareLineup(t *testing.T) {
 	token := signTestJWT(compareUserID, "compare@example.com", "compare_user")
 	createLineupForCompare(t, baseURL, token)
 
-	resp, err := http.Get(baseURL + "/league/abc/week/8/roster/1/compare?user_id=" + compareUserID)
+	resp, err := authedGet(token, baseURL+"/league/abc/week/8/roster/1/compare")
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
@@ -1235,8 +1265,10 @@ func TestCompareLineup(t *testing.T) {
 
 func TestCompareLineup_NoLineup(t *testing.T) {
 	baseURL := newTestServer(t, compareSleeperHandler())
+	// Authenticated, but this user submitted no lineup for the week → 404.
+	token := signTestJWT("00000000-0000-0000-0000-000000000044", "nolineup@example.com", "no_lineup")
 
-	resp, err := http.Get(baseURL + "/league/abc/week/8/roster/1/compare?user_id=nobody")
+	resp, err := authedGet(token, baseURL+"/league/abc/week/8/roster/1/compare")
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
@@ -1249,8 +1281,9 @@ func TestCompareLineup_NoLineup(t *testing.T) {
 
 func TestCompareLineup_InvalidWeek(t *testing.T) {
 	baseURL := newTestServer(t, noopHandler())
+	token := signTestJWT("00000000-0000-0000-0000-000000000045", "iw@example.com", "invalid_week")
 
-	resp, err := http.Get(baseURL + "/league/abc/week/notanumber/roster/1/compare?user_id=x")
+	resp, err := authedGet(token, baseURL+"/league/abc/week/notanumber/roster/1/compare")
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
@@ -1261,17 +1294,18 @@ func TestCompareLineup_InvalidWeek(t *testing.T) {
 	}
 }
 
-func TestCompareLineup_MissingUserID(t *testing.T) {
+func TestCompare_RequiresAuth(t *testing.T) {
 	baseURL := newTestServer(t, noopHandler())
 
+	// No Authorization header → requireAuth rejects before the handler runs.
 	resp, err := http.Get(baseURL + "/league/abc/week/8/roster/1/compare")
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Errorf("expected 400, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", resp.StatusCode)
 	}
 }
 

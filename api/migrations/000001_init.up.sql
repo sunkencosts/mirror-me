@@ -84,3 +84,23 @@ CREATE TABLE users(
     UNIQUE (oauth_provider, oauth_id)
 );
 
+-- week_results: the cached, graded outcome of one head-to-head week, written by the
+-- grading step once a week is final (week < CURRENT_WEEK). The leaderboards aggregate
+-- these rows (mean efficiency = avg(user_total/optimal_total), win rate, edge,
+-- weeks_played) rather than recomputing from Sleeper on every request. Idempotent upsert
+-- keyed by the lineup's identity. user_total/official_total/optimal_total are the week's
+-- points; result is the head-to-head winner (user|official|tie).
+CREATE TABLE week_results(
+    user_id text NOT NULL,
+    league_id text NOT NULL,
+    roster_id int NOT NULL,
+    week int NOT NULL,
+    season text NOT NULL,
+    user_total double precision NOT NULL,
+    official_total double precision NOT NULL,
+    optimal_total double precision NOT NULL,
+    result text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, league_id, roster_id, week, season)
+);
+

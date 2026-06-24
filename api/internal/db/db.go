@@ -185,6 +185,130 @@ func (s *Store) ListLineups(ctx context.Context, userID, leagueID string, weekNu
 	return lineups, nil
 }
 
+// CurrentWeekFromLocks infers the live NFL week for a season from week_locks: the latest
+// week whose first kickoff has already passed. Returns 0 when no week has kicked off yet
+// (pre-season), which the caller maps to week 1. This auto-advances at each week's kickoff,
+// so no manual CURRENT_WEEK bump is needed. (Unseeded weeks — e.g. 2026 wk 12/18 — are gaps
+// that can briefly hold the inferred week back until the next seeded kickoff passes.)
+func (s *Store) CurrentWeekFromLocks(ctx context.Context, season string, at time.Time) (int, error) {
+	var week int
+	err := s.pool.QueryRow(ctx,
+		`SELECT COALESCE(MAX(week), 0) FROM week_locks WHERE season = $1 AND locks_at <= $2`,
+		season, at).Scan(&week)
+	if err != nil {
+		return 0, fmt.Errorf("inferring current week for %s: %w", season, err)
+	}
+	return week, nil
+}
+
+// ListGradableLineups returns every lineup for a past week (week_number < currentWeek)
+// that does NOT yet have a week_results row. This drives both first-time grading and
+// backfill: a lineup that failed to grade once (e.g. transient Sleeper outage) keeps
+// showing up until a result is written, and an already-graded lineup is excluded
+// (idempotent).
+func (s *Store) ListGradableLineups(ctx context.Context, currentWeek int) ([]provider.Lineup, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT l.id, l.user_id, l.league_id, l.source, l.roster_id, l.week_number, l.season, l.starters, l.created_at, l.updated_at
+		FROM lineups l
+		WHERE l.week_number < $1
+		  AND NOT EXISTS (
+		      SELECT 1 FROM week_results wr
+		      WHERE wr.user_id = l.user_id AND wr.league_id = l.league_id
+		        AND wr.roster_id = l.roster_id AND wr.week = l.week_number AND wr.season = l.season
+		  )
+	`, currentWeek)
+	if err != nil {
+		return nil, fmt.Errorf("listing gradable lineups: %w", err)
+	}
+	defer rows.Close()
+
+	lineups := []provider.Lineup{}
+	for rows.Next() {
+		l, err := scanLineup(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scanning gradable lineup: %w", err)
+		}
+		lineups = append(lineups, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating gradable lineups: %w", err)
+	}
+	return lineups, nil
+}
+
+// Leaderboard aggregates week_results into per-user standings for a season, sorted by
+// mean lineup efficiency (D3/D24) then weeks played then user id (D20). leagueID == ""
+// gives the global board (pooled across all of a user's mirrors, D14); a non-empty
+// leagueID scopes to one league. The JOIN to users means only authenticated users with a
+// username appear (D15) — anonymous user_ids are excluded. Rank/Provisional are policy
+// applied by the caller (the min-weeks gate differs global vs per-league).
+func (s *Store) Leaderboard(ctx context.Context, season, leagueID string) ([]provider.LeaderboardRow, error) {
+	args := []any{season}
+	leagueFilter := ""
+	if leagueID != "" {
+		args = append(args, leagueID)
+		leagueFilter = "AND wr.league_id = $2"
+	}
+
+	// edge mirrors scoring.GradeWeek's per-week Edge exactly: the mean of
+	// clamp01(user/optimal) - clamp01(official/optimal), so the season figure reconciles
+	// with the per-week edges the compare endpoint reports. weeks_played counts only
+	// SCORED weeks (optimal_total > 0); weeks excluded from mean_eff via NULLIF must not
+	// pad the count or the provisional-rank gate (they would otherwise describe a larger
+	// sample than the efficiency they sit next to).
+	query := `
+		SELECT wr.user_id, u.username,
+		       COALESCE(AVG(wr.user_total / NULLIF(wr.optimal_total, 0)), 0) AS mean_eff,
+		       COALESCE(AVG(
+		           LEAST(GREATEST(wr.user_total / NULLIF(wr.optimal_total, 0), 0), 1)
+		           - LEAST(GREATEST(wr.official_total / NULLIF(wr.optimal_total, 0), 0), 1)
+		       ), 0) AS edge,
+		       COALESCE(
+		           COUNT(*) FILTER (WHERE wr.result = 'user')::float8
+		           / NULLIF(COUNT(*) FILTER (WHERE wr.result IN ('user', 'official')), 0),
+		       0) AS win_rate,
+		       COUNT(*) FILTER (WHERE wr.optimal_total > 0) AS weeks_played
+		FROM week_results wr
+		JOIN users u ON u.id::text = wr.user_id
+		WHERE wr.season = $1 ` + leagueFilter + `
+		GROUP BY wr.user_id, u.username
+		ORDER BY mean_eff DESC, weeks_played DESC, wr.user_id ASC`
+
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("querying leaderboard: %w", err)
+	}
+	defer rows.Close()
+
+	out := []provider.LeaderboardRow{}
+	for rows.Next() {
+		var r provider.LeaderboardRow
+		if err := rows.Scan(&r.UserID, &r.Username, &r.MeanEfficiency, &r.Edge, &r.WinRate, &r.WeeksPlayed); err != nil {
+			return nil, fmt.Errorf("scanning leaderboard row: %w", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating leaderboard: %w", err)
+	}
+	return out, nil
+}
+
+// UpsertWeekResult writes (or overwrites) the graded outcome of one head-to-head week.
+func (s *Store) UpsertWeekResult(ctx context.Context, r provider.WeekResult) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO week_results (user_id, league_id, roster_id, week, season, user_total, official_total, optimal_total, result)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		ON CONFLICT (user_id, league_id, roster_id, week, season)
+		DO UPDATE SET user_total = EXCLUDED.user_total, official_total = EXCLUDED.official_total,
+		              optimal_total = EXCLUDED.optimal_total, result = EXCLUDED.result
+	`, r.UserID, r.LeagueID, r.RosterID, r.Week, r.Season, r.UserTotal, r.OfficialTotal, r.OptimalTotal, r.Result)
+	if err != nil {
+		return fmt.Errorf("upserting week result: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) UpdateLineup(ctx context.Context, id string, starters []string) (provider.Lineup, error) {
 	row := s.pool.QueryRow(ctx, `
 		UPDATE lineups

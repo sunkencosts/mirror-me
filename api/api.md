@@ -267,19 +267,16 @@ This is the lineup editor's source of truth for whether edits are still allowed.
 
 ---
 
-### `GET /league/{leagueId}/week/{week}/roster/{rosterId}/compare`
-Score the user's submitted lineup against the roster's official lineup for the week,
-using Sleeper's per-player points, and declare a winner.
+### `GET /league/{leagueId}/week/{week}/roster/{rosterId}/compare` — auth required
+Score the **authenticated user's** submitted lineup against the roster's official lineup
+and the roster's optimal lineup for the week, using Sleeper's per-player points, and
+declare a winner. The user is taken from the JWT (`auth_token` cookie or
+`Authorization: Bearer`), not a query param.
 
 **Path params**
 - `leagueId` — Sleeper league ID
 - `week` — NFL week number (≥ 1)
 - `rosterId` — roster within the league (≥ 1)
-
-**Query params**
-| Param | Type | Required |
-|---|---|---|
-| `user_id` | UUID | yes |
 
 **Response** `200 OK`
 ```json
@@ -295,13 +292,64 @@ using Sleeper's per-player points, and declare a winner.
     "starters": [{ /* Player */, "points": 9.1 }],
     "total_points": 118.7
   },
-  "winner": "user"
+  "winner": "user",
+  "optimal_points": 132.0,
+  "user_efficiency": 0.90,
+  "official_efficiency": 0.84,
+  "edge": 0.06,
+  "final": false
 }
 ```
 - `winner` — `"official"`, `"user"`, or `"tie"`
 - `official.total_points` uses Sleeper's `custom_points` when present, else `points`
-- **400** invalid week / roster_id, or missing `user_id`
+- `optimal_points` — the roster's best-possible legal lineup; `0` when the week is
+  excluded (unknown/exotic slots, or the roster can't fill every slot)
+- `*_efficiency` — `total / optimal_points`, clamped to `[0, 1]`; `0` when excluded
+- `edge` — `user_efficiency - official_efficiency`
+- `final` — `false` for the live/current week, `true` once the week has passed
+- **401** missing/invalid auth
+- **400** invalid week / roster_id
 - **404** roster not in this week's matchups, or no lineup submitted for the week
+
+---
+
+## Leaderboards
+
+Aggregate cached `week_results` (written by `POST /admin/grade`) into per-user standings
+for a season, sorted by mean lineup efficiency. Only authenticated users with a username
+appear. Rows are returned ranked first (1-based `rank`), then provisional rows (`rank: 0`,
+`provisional: true`) that have not met the minimum-weeks gate.
+
+### `GET /leaderboard`
+Global board pooled across all of a user's mirrors. Provisional below **3** graded weeks.
+
+**Query params**
+| Param | Type | Required | Default |
+|---|---|---|---|
+| `season` | string | no | configured `CURRENT_SEASON` |
+
+**Response** `200 OK`
+```json
+[
+  {
+    "user_id": "uuid",
+    "username": "alice",
+    "rank": 1,
+    "mean_efficiency": 0.91,
+    "edge": 0.05,
+    "win_rate": 0.75,
+    "weeks_played": 6,
+    "provisional": false
+  }
+]
+```
+- `mean_efficiency` — mean of `user_total / optimal_total` over scored weeks
+- `edge` — mean of per-week (`user_efficiency - official_efficiency`)
+- `win_rate` — wins / (wins + losses); ties excluded
+- `weeks_played` — count of scored weeks (`optimal_total > 0`)
+
+### `GET /league/{leagueId}/leaderboard`
+Same shape, scoped to one league, with **no** minimum-weeks gate (ranked from week 1).
 
 ---
 
@@ -315,6 +363,19 @@ No request body.
 **Response** `200 OK`
 ```json
 { "upserted": 1234 }
+```
+
+### `POST /admin/grade`
+Grades every past-week lineup (`week_number < current_week`) that lacks a `week_results`
+row and backfills anything still ungraded. Idempotent — already-graded lineups are
+skipped, and a lineup that can't be graded this run (transient Sleeper failure, roster not
+yet in the week's matchups) is left for a later run. Safe to run on a schedule.
+
+No request body.
+
+**Response** `200 OK`
+```json
+{ "graded": 42 }
 ```
 
 ---

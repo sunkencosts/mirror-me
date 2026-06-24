@@ -229,6 +229,42 @@ type CompareResponse struct {
 	Official ScoredLineup `json:"official"`
 	User     ScoredLineup `json:"user"`
 	Winner   string       `json:"winner"`
+	// Scoring context for the brag: how each side did vs. the roster's best-possible
+	// lineup, and the user's edge over the manager (D23/D27). Final is false for the
+	// live/current week (D22) — the leaderboard ignores non-final results.
+	OptimalPoints      float64 `json:"optimal_points"`
+	UserEfficiency     float64 `json:"user_efficiency"`
+	OfficialEfficiency float64 `json:"official_efficiency"`
+	Edge               float64 `json:"edge"`
+	Final              bool    `json:"final"`
+}
+
+// LeaderboardRow is one user's standing, aggregated over their graded weeks. MeanEfficiency
+// is the sort key (D3/D24); WinRate/Edge/WeeksPlayed are secondary. Provisional rows
+// (global board, < min weeks — D7) are returned after ranked rows with Rank 0.
+type LeaderboardRow struct {
+	UserID         string  `json:"user_id"`
+	Username       string  `json:"username"`
+	Rank           int     `json:"rank"` // 1-based; 0 when provisional/unranked
+	MeanEfficiency float64 `json:"mean_efficiency"`
+	Edge           float64 `json:"edge"`     // mean (user_total-official_total)/optimal_total
+	WinRate        float64 `json:"win_rate"` // wins/(wins+losses), ties excluded
+	WeeksPlayed    int     `json:"weeks_played"`
+	Provisional    bool    `json:"provisional"`
+}
+
+// WeekResult is the cached graded outcome of one head-to-head week (one row per
+// submitted, final lineup). The leaderboards aggregate these.
+type WeekResult struct {
+	UserID        string  `json:"user_id"`
+	LeagueID      string  `json:"league_id"`
+	RosterID      int     `json:"roster_id"`
+	Week          int     `json:"week"`
+	Season        string  `json:"season"`
+	UserTotal     float64 `json:"user_total"`
+	OfficialTotal float64 `json:"official_total"`
+	OptimalTotal  float64 `json:"optimal_total"`
+	Result        string  `json:"result"` // user | official | tie
 }
 
 type Lineup struct {
