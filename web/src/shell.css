@@ -40,17 +40,10 @@
 .brand .mark {
 	width: 34px;
 	height: 34px;
-	border-radius: 10px;
+	border-radius: 9px;
 	flex: 0 0 auto;
-	display: grid;
-	place-items: center;
-	background: linear-gradient(150deg, var(--accent), var(--accent-2));
-	color: var(--accent-ink);
+	display: block;
 	box-shadow: 0 4px 16px -4px var(--accent-line);
-}
-.brand .mark svg {
-	width: 20px;
-	height: 20px;
 }
 .brand .wm {
 	font-family: var(--display);
