@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80" role="img" aria-label="Mirror League">
+  <defs>
+    <linearGradient id="ml-fav" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2fd07f"></stop>
+      <stop offset="1" stop-color="#1f9d62"></stop>
+    </linearGradient>
+  </defs>
+  <rect width="80" height="80" rx="20" fill="url(#ml-fav)"></rect>
+  <path d="M18 56 V24 L40 41 L62 24 V56" fill="none" stroke="#04130b" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>

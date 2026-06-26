@@ -2,7 +2,6 @@ import { Link } from "react-router";
 import { useCurrentLeague } from "../../hooks/useCurrentLeague";
 import { useLeagueName } from "../../hooks/useLeagueName";
 import type { AuthUser } from "../../types";
-import { Icon } from "../icons";
 import LeagueSwitcher from "./LeagueSwitcher";
 import NavItem from "./NavItem";
 import { GLOBAL_ROUTES, LEAGUE_ROUTES } from "./routes";
@@ -24,9 +23,7 @@ export default function Sidebar({ user, isLoading, onLogout, open, onNavigate }:
 	return (
 		<aside className={`side${open ? " open" : ""}`}>
 			<Link to="/" className="brand" onClick={onNavigate}>
-				<div className="mark">
-					<Icon name="stack" />
-				</div>
+				<img className="mark" src="/brand/logo.svg" alt="Mirror League" width={34} height={34} />
 				<div className="wm">
 					Mirror League
 					<small>Mirror a Sleeper league</small>

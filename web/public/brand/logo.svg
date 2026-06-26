@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80" role="img" aria-label="Mirror League">
+  <defs>
+    <linearGradient id="ml-tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2fd07f"></stop>
+      <stop offset="1" stop-color="#1f9d62"></stop>
+    </linearGradient>
+  </defs>
+  <rect width="80" height="80" rx="20" fill="url(#ml-tile)"></rect>
+  <path d="M22 40 V20.5 L40 33.25 L58 20.5 V40" fill="none" stroke="#04130b" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"></path>
+  <path d="M22 41.5 V61 L40 48.25 L58 61 V41.5" fill="none" stroke="#176a45" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"></path>
+  <line x1="17.5" y1="40.75" x2="62.5" y2="40.75" stroke="#1c7a4f" stroke-width="2.6" stroke-linecap="round"></line>
+</svg>
