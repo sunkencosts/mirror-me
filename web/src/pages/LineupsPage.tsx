@@ -1,11 +1,11 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { bookmarksKey, fetchJson, patchJson } from "../api";
-import { Icon } from "../components/icons";
 import LeagueSummary from "../components/LeagueSummary";
 import PlayerSearch from "../components/PlayerSearch";
 import RosterCard from "../components/RosterCard";
+import TeamSelect from "../components/TeamSelect";
 import { useAuth } from "../context/AuthContext";
 import { useDismissed } from "../hooks/useDismissed";
 import { computePowerScore } from "../scoring";
@@ -114,7 +114,6 @@ export default function LineupsPage() {
 		[rosters],
 	);
 
-	const [teamMenuOpen, setTeamMenuOpen] = useState(false);
 
 	const [dismissedToEnd, setDismissedToEnd] = useDismissed(leagueId);
 
@@ -214,46 +213,12 @@ export default function LineupsPage() {
 			/>
 			<div className="lineup-toolbar">
 				<PlayerSearch rosters={rosters} onScrollToRoster={scrollToRoster} />
-				<div className="select">
-					<button
-						type="button"
-						className="select-trigger"
-						aria-label="Jump to team"
-						aria-expanded={teamMenuOpen}
-						onClick={() => setTeamMenuOpen((open) => !open)}
-					>
-						<Icon name="users" />
-						<span>Jump to team…</span>
-						<Icon name="chevDown" />
-					</button>
-					{teamMenuOpen && (
-						<>
-							<button
-								type="button"
-								aria-label="Close"
-								className="pop-backdrop"
-								onMouseDown={() => setTeamMenuOpen(false)}
-							/>
-							<div className="pop team-pop">
-								<div className="pop-list">
-									{[...activeRosters, ...dismissedRosters].map((r) => (
-										<button
-											key={r.roster_id}
-											type="button"
-											className="pop-item"
-											onClick={() => {
-												scrollToRoster(r.roster_id);
-												setTeamMenuOpen(false);
-											}}
-										>
-											<span className="pname">{r.team_name || `Team ${r.roster_id}`}</span>
-										</button>
-									))}
-								</div>
-							</div>
-						</>
-					)}
-				</div>
+				<TeamSelect
+					rosters={[...activeRosters, ...dismissedRosters]}
+					onSelect={scrollToRoster}
+					placeholder="Jump to team…"
+					ariaLabel="Jump to team"
+				/>
 			</div>
 			<div className="teams-grid">{activeRosters.map((roster) => renderCard(roster, false))}</div>
 			{dismissedRosters.length > 0 && (

@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sunkencosts/mirrorleague/internal/provider"
+	"github.com/sunkencosts/mirrorleague/internal/scoring"
 )
 
 type scanner interface {
@@ -158,12 +159,18 @@ func (s *Store) ListLineups(ctx context.Context, userID, leagueID string, weekNu
 	query := `
 		SELECT id, user_id, league_id, source, roster_id, week_number, season, starters, created_at, updated_at
 		FROM lineups
-		WHERE user_id = $1 AND league_id = $2 AND week_number = $3`
-	args := []any{userID, leagueID, weekNumber}
-	if rosterID != nil {
-		query += ` AND roster_id = $4`
-		args = append(args, *rosterID)
+		WHERE user_id = $1 AND league_id = $2`
+	args := []any{userID, leagueID}
+	// weekNumber <= 0 means "all weeks" (the discovery listing); a positive value filters.
+	if weekNumber > 0 {
+		args = append(args, weekNumber)
+		query += fmt.Sprintf(` AND week_number = $%d`, len(args))
 	}
+	if rosterID != nil {
+		args = append(args, *rosterID)
+		query += fmt.Sprintf(` AND roster_id = $%d`, len(args))
+	}
+	query += ` ORDER BY week_number DESC`
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -294,6 +301,68 @@ func (s *Store) Leaderboard(ctx context.Context, season, leagueID string) ([]pro
 	return out, nil
 }
 
+// WeeklyResults returns the per-setter standings for one (season, league, week, roster):
+// the official/optimal baseline (identical across the roster's rows, so MAX picks it) plus
+// every setter ranked by efficiency desc. Rank is computed over ALL setters (a window), then
+// the slice is optionally filtered by a username substring (q) and paginated (limit/offset) —
+// so a searched/paged row still carries its true standing. SetterCount is the unfiltered
+// total. Powers the weekly results browser; reads only the cached week_results (no Sleeper).
+func (s *Store) WeeklyResults(ctx context.Context, season, leagueID string, rosterID, week int, q string, limit, offset int) (provider.WeeklyRosterResults, error) {
+	out := provider.WeeklyRosterResults{RosterID: rosterID, Setters: []provider.WeeklySetterResult{}}
+
+	err := s.pool.QueryRow(ctx, `
+		SELECT COALESCE(MAX(official_total), 0), COALESCE(MAX(optimal_total), 0), COUNT(*),
+		       COUNT(*) FILTER (WHERE user_total > official_total)
+		FROM week_results
+		WHERE season = $1 AND league_id = $2 AND roster_id = $3 AND week = $4`,
+		season, leagueID, rosterID, week).Scan(&out.OfficialTotal, &out.OptimalTotal, &out.SetterCount, &out.BeatOfficialCount)
+	if err != nil {
+		return provider.WeeklyRosterResults{}, fmt.Errorf("weekly results baseline: %w", err)
+	}
+	if out.OptimalTotal > 0 {
+		out.OfficialEfficiency = scoring.Clamp01(out.OfficialTotal / out.OptimalTotal)
+	}
+	if out.SetterCount == 0 {
+		return out, nil
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		WITH ranked AS (
+			SELECT wr.user_id, u.username, wr.user_total, wr.result,
+			       LEAST(GREATEST(wr.user_total / NULLIF(wr.optimal_total, 0), 0), 1) AS efficiency,
+			       LEAST(GREATEST(wr.user_total / NULLIF(wr.optimal_total, 0), 0), 1)
+			         - LEAST(GREATEST(wr.official_total / NULLIF(wr.optimal_total, 0), 0), 1) AS edge,
+			       ROW_NUMBER() OVER (
+			           ORDER BY LEAST(GREATEST(wr.user_total / NULLIF(wr.optimal_total, 0), 0), 1) DESC,
+			                    wr.user_id ASC
+			       ) AS rank
+			FROM week_results wr
+			JOIN users u ON u.id::text = wr.user_id
+			WHERE wr.season = $1 AND wr.league_id = $2 AND wr.roster_id = $3 AND wr.week = $4
+		)
+		SELECT user_id, username, user_total, efficiency, edge, result, rank
+		FROM ranked
+		WHERE ($5 = '' OR username ILIKE '%' || $5 || '%')
+		ORDER BY rank
+		LIMIT $6 OFFSET $7`,
+		season, leagueID, rosterID, week, q, limit, offset)
+	if err != nil {
+		return provider.WeeklyRosterResults{}, fmt.Errorf("weekly results setters: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var r provider.WeeklySetterResult
+		if err := rows.Scan(&r.UserID, &r.Username, &r.UserTotal, &r.Efficiency, &r.Edge, &r.Result, &r.Rank); err != nil {
+			return provider.WeeklyRosterResults{}, fmt.Errorf("scanning weekly setter: %w", err)
+		}
+		out.Setters = append(out.Setters, r)
+	}
+	if err := rows.Err(); err != nil {
+		return provider.WeeklyRosterResults{}, fmt.Errorf("iterating weekly setters: %w", err)
+	}
+	return out, nil
+}
+
 // UpsertWeekResult writes (or overwrites) the graded outcome of one head-to-head week.
 func (s *Store) UpsertWeekResult(ctx context.Context, r provider.WeekResult) error {
 	_, err := s.pool.Exec(ctx, `
@@ -307,6 +376,150 @@ func (s *Store) UpsertWeekResult(ctx context.Context, r provider.WeekResult) err
 		return fmt.Errorf("upserting week result: %w", err)
 	}
 	return nil
+}
+
+// GetCachedWeekMatchups returns the persisted matchup rows for a (league, week), resolving
+// stored player IDs back into full Player objects (the same shape the Sleeper client returns).
+// ok is false when nothing is cached. Keyed (league, week) like the in-memory cache.
+func (s *Store) GetCachedWeekMatchups(ctx context.Context, leagueID string, week int) ([]provider.WeekMatchup, bool, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT roster_id, matchup_id, owner_id, team_name, points, custom_points, players, starters, player_points
+		FROM week_matchups
+		WHERE league_id = $1 AND week = $2
+		ORDER BY roster_id`, leagueID, week)
+	if err != nil {
+		return nil, false, fmt.Errorf("reading cached week matchups: %w", err)
+	}
+	defer rows.Close()
+
+	type rawMatchup struct {
+		rosterID, matchupID int
+		ownerID, teamName   string
+		points              float64
+		customPoints        *float64
+		players, starters   []string
+		playerPoints        map[string]float64
+	}
+	var raws []rawMatchup
+	allIDs := []string{}
+	for rows.Next() {
+		var m rawMatchup
+		if err := rows.Scan(&m.rosterID, &m.matchupID, &m.ownerID, &m.teamName, &m.points,
+			&m.customPoints, &m.players, &m.starters, &m.playerPoints); err != nil {
+			return nil, false, fmt.Errorf("scanning cached week matchup: %w", err)
+		}
+		allIDs = append(allIDs, m.players...)
+		allIDs = append(allIDs, m.starters...)
+		raws = append(raws, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, fmt.Errorf("iterating cached week matchups: %w", err)
+	}
+	if len(raws) == 0 {
+		return nil, false, nil
+	}
+
+	playerMap, err := s.GetPlayersByIDs(ctx, allIDs)
+	if err != nil {
+		return nil, false, fmt.Errorf("resolving cached matchup players: %w", err)
+	}
+
+	out := make([]provider.WeekMatchup, 0, len(raws))
+	for _, m := range raws {
+		out = append(out, provider.WeekMatchup{
+			RosterID:     m.rosterID,
+			MatchupID:    m.matchupID,
+			OwnerID:      m.ownerID,
+			TeamName:     m.teamName,
+			Points:       m.points,
+			CustomPoints: m.customPoints,
+			Players:      resolvePlayers(playerMap, m.players),
+			Starters:     resolvePlayers(playerMap, m.starters),
+			PlayerPoints: m.playerPoints,
+		})
+	}
+	return out, true, nil
+}
+
+// SaveWeekMatchups upserts the matchup rows for a (league, week) into the persistent cache.
+// Player objects are stored as their IDs; player_points as jsonb. Best-effort write-through
+// for FINAL weeks so later reads skip Sleeper.
+func (s *Store) SaveWeekMatchups(ctx context.Context, leagueID string, week int, matchups []provider.WeekMatchup) error {
+	for _, m := range matchups {
+		_, err := s.pool.Exec(ctx, `
+			INSERT INTO week_matchups
+			  (league_id, week, roster_id, matchup_id, owner_id, team_name, points, custom_points, players, starters, player_points)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			ON CONFLICT (league_id, week, roster_id) DO UPDATE SET
+			  matchup_id = EXCLUDED.matchup_id, owner_id = EXCLUDED.owner_id, team_name = EXCLUDED.team_name,
+			  points = EXCLUDED.points, custom_points = EXCLUDED.custom_points, players = EXCLUDED.players,
+			  starters = EXCLUDED.starters, player_points = EXCLUDED.player_points, fetched_at = now()`,
+			leagueID, week, m.RosterID, m.MatchupID, m.OwnerID, m.TeamName, m.Points, m.CustomPoints,
+			provider.PlayerIDs(m.Players), provider.PlayerIDs(m.Starters), m.PlayerPoints)
+		if err != nil {
+			return fmt.Errorf("saving week matchup %s/%d/r%d: %w", leagueID, week, m.RosterID, err)
+		}
+	}
+	return nil
+}
+
+// GetCachedLeague returns the persisted shape of a league (its roster_positions, name,
+// season, current leg). ok is false when the league isn't cached. Only the fields the app
+// actually consumes downstream (positions for scoring, season, leg for the current-week
+// display) are reconstructed; the rest of provider.League stays zero.
+func (s *Store) GetCachedLeague(ctx context.Context, leagueID string) (provider.League, bool, error) {
+	var (
+		name, season    string
+		leg             int
+		rosterPositions []string
+	)
+	err := s.pool.QueryRow(ctx, `
+		SELECT name, season, leg, roster_positions
+		FROM leagues
+		WHERE league_id = $1`, leagueID).Scan(&name, &season, &leg, &rosterPositions)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return provider.League{}, false, nil
+	}
+	if err != nil {
+		return provider.League{}, false, fmt.Errorf("reading cached league: %w", err)
+	}
+	league := provider.League{
+		Name:            name,
+		Season:          season,
+		LeagueID:        leagueID,
+		RosterPositions: rosterPositions,
+	}
+	league.Settings.Leg = leg
+	return league, true, nil
+}
+
+// SaveLeague upserts a league's cached shape. Best-effort write-through so later reads
+// (grading, the per-setter compare) skip Sleeper's /league endpoint.
+func (s *Store) SaveLeague(ctx context.Context, league provider.League) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO leagues (league_id, name, season, leg, roster_positions, fetched_at)
+		VALUES ($1, $2, $3, $4, $5, now())
+		ON CONFLICT (league_id) DO UPDATE SET
+		  name = EXCLUDED.name, season = EXCLUDED.season, leg = EXCLUDED.leg,
+		  roster_positions = EXCLUDED.roster_positions, fetched_at = now()`,
+		league.LeagueID, league.Name, league.Season, league.Settings.Leg, league.RosterPositions)
+	if err != nil {
+		return fmt.Errorf("saving league %s: %w", league.LeagueID, err)
+	}
+	return nil
+}
+
+// resolvePlayers turns stored player IDs back into Player objects, reconstructing the CDN
+// image URL exactly as the Sleeper client does. Unknown IDs are dropped (matching the client).
+func resolvePlayers(playerMap map[string]provider.Player, ids []string) []provider.Player {
+	players := []provider.Player{}
+	for _, id := range ids {
+		if player, ok := playerMap[id]; ok {
+			player.ImageURL = fmt.Sprintf("https://sleepercdn.com/content/nfl/players/thumb/%s.jpg", player.PlayerID)
+			players = append(players, player)
+		}
+	}
+	return players
 }
 
 func (s *Store) UpdateLineup(ctx context.Context, id string, starters []string) (provider.Lineup, error) {

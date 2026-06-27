@@ -54,7 +54,7 @@ func GradeSeason(ctx context.Context, lineups LineupLister, results ResultWriter
 			matchupCache[key] = matchups
 		}
 
-		official := findMatchup(matchups, lineup.RosterID)
+		official := provider.FindMatchup(matchups, lineup.RosterID)
 		if official == nil {
 			slog.WarnContext(ctx, "grading: roster not in matchups; will retry next run",
 				slog.String("league", lineup.LeagueID), slog.Int("week", lineup.WeekNumber), slog.Int("roster", lineup.RosterID))
@@ -72,7 +72,7 @@ func GradeSeason(ctx context.Context, lineups LineupLister, results ResultWriter
 			leagueCache[lineup.LeagueID] = league
 		}
 
-		grade := scoring.GradeWeek(buildGradeInput(league, official, lineup, currentWeek))
+		grade := scoring.GradeWeek(BuildGradeInput(league, official, lineup, currentWeek))
 
 		if err := results.UpsertWeekResult(ctx, provider.WeekResult{
 			UserID:        lineup.UserID,
@@ -94,36 +94,23 @@ func GradeSeason(ctx context.Context, lineups LineupLister, results ResultWriter
 	return graded, nil
 }
 
-func buildGradeInput(league provider.League, official *provider.WeekMatchup, lineup provider.Lineup, currentWeek int) scoring.GradeInput {
-	rosterPlayerIDs := make([]string, len(official.Players))
+// BuildGradeInput assembles the scoring.GradeInput for one (user, roster, week) from the
+// official matchup, the user's lineup, and league settings. Shared by the season grader and
+// the live compare handler so the two never derive grade inputs differently.
+func BuildGradeInput(league provider.League, official *provider.WeekMatchup, lineup provider.Lineup, currentWeek int) scoring.GradeInput {
 	playerPositions := make(map[string][]string, len(official.Players))
-	for i, pl := range official.Players {
-		rosterPlayerIDs[i] = pl.PlayerID
+	for _, pl := range official.Players {
 		playerPositions[pl.PlayerID] = pl.FantasyPositions
-	}
-
-	officialTotal := official.Points
-	if official.CustomPoints != nil {
-		officialTotal = *official.CustomPoints
 	}
 
 	return scoring.GradeInput{
 		RosterPositions: league.RosterPositions,
-		RosterPlayers:   rosterPlayerIDs,
+		RosterPlayers:   provider.PlayerIDs(official.Players),
 		UserStarters:    lineup.Starters,
-		OfficialTotal:   officialTotal,
+		OfficialTotal:   official.OfficialTotal(),
 		Points:          official.PlayerPoints,
 		PlayerPositions: playerPositions,
 		Week:            lineup.WeekNumber,
 		CurrentWeek:     currentWeek,
 	}
-}
-
-func findMatchup(matchups []provider.WeekMatchup, rosterID int) *provider.WeekMatchup {
-	for i := range matchups {
-		if matchups[i].RosterID == rosterID {
-			return &matchups[i]
-		}
-	}
-	return nil
 }

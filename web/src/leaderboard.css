@@ -1,0 +1,264 @@
+/* ============================================================
+   Leaderboard (global + per-league) — token-derived styles.
+   NOTE: the design prototype (design_handoff_mirror_league/) was not
+   present in the repo, so unlike the rest of the redesign these rules
+   are hand-authored from the existing design tokens (index.css) and
+   modeled on the table/chip patterns in RookieRankingsPage.css —
+   not ported verbatim. Keep visuals consistent with .rk-table / .kpi.
+   ============================================================ */
+
+/* season filter row — reuses .fchip from RookieRankingsPage.css */
+.filters {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+	margin-bottom: var(--gap);
+}
+
+/* ---- podium (top 3 ranked; rendered 2nd · 1st · 3rd) ---- */
+.podium {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 14px;
+	align-items: end;
+	margin-bottom: var(--gap);
+}
+.pod {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 10px;
+	padding: 18px 14px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: linear-gradient(180deg, var(--card-2), var(--card));
+	text-align: center;
+}
+.pod.first {
+	border-color: var(--accent-line);
+	background: linear-gradient(180deg, var(--accent-soft), var(--card));
+	padding-top: 26px;
+	padding-bottom: 26px;
+}
+.pod .place {
+	font-family: var(--display);
+	font-weight: 800;
+	font-size: 13px;
+	color: var(--mute);
+}
+.pod.first .place {
+	color: var(--accent);
+}
+.pod .name {
+	font-family: var(--display);
+	font-weight: 700;
+	font-size: 14px;
+	white-space: nowrap;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.pod .eff {
+	font-family: var(--display);
+	font-weight: 800;
+	font-size: 24px;
+	letter-spacing: -0.5px;
+}
+.pod .wks {
+	font-size: 11.5px;
+	color: var(--mute);
+}
+
+/* ---- table cells specific to the leaderboard (extends .rk-table) ---- */
+.lb-who {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+.lb-eff {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 150px;
+}
+.lb-eff .v {
+	font-family: var(--display);
+	font-weight: 800;
+	min-width: 42px;
+}
+.scorebar {
+	display: block;
+	flex: 1;
+	height: 6px;
+	background: var(--border);
+	border-radius: 3px;
+	overflow: hidden;
+}
+.scorebar .fill {
+	/* span defaults to display:inline, which ignores width/height — block it so
+	   the inline width % (set per-row) actually sizes the bar. */
+	display: block;
+	height: 100%;
+	background: var(--accent);
+	border-radius: 3px;
+}
+.lb-edge {
+	font-family: var(--display);
+	font-weight: 800;
+}
+.lb-edge.pos {
+	color: var(--win);
+}
+.lb-edge.neg {
+	color: var(--lose);
+}
+
+/* ---- "almost there" provisional group (global board only) ---- */
+.provisional {
+	margin-top: var(--gap);
+}
+.provisional .lead {
+	font-size: 12.5px;
+	color: var(--mute);
+	margin-bottom: 10px;
+}
+.provisional tr td {
+	color: var(--dim);
+}
+
+/* ---- empty state ---- */
+.lb-empty {
+	text-align: center;
+	padding: 48px 20px;
+	color: var(--mute);
+}
+
+/* ============================================================
+   Weekly results browser (the League Stats page)
+   ============================================================ */
+.wr-controls {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex-wrap: wrap;
+	margin-bottom: var(--gap);
+}
+.wr-controls .field {
+	width: auto;
+	min-width: 180px;
+}
+.wr-search {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	height: 38px;
+	padding: 0 12px;
+	border-radius: 10px;
+	border: 1px solid var(--border-2);
+	background: var(--card-2);
+	color: var(--dim);
+}
+.wr-search svg {
+	width: 14px;
+	height: 14px;
+}
+.wr-search input {
+	background: none;
+	border: none;
+	outline: none;
+	color: var(--text);
+	font: inherit;
+	width: 150px;
+}
+.wr-baseline {
+	grid-template-columns: repeat(3, 1fr);
+}
+
+/* personal headline: the "you set the Nth best lineup" banner above the field */
+.wr-headline {
+	background: var(--card);
+	border: 1px solid var(--accent-line);
+	border-radius: var(--radius);
+	padding: 16px 20px;
+	margin-bottom: var(--gap);
+}
+.wr-headline .wr-you {
+	margin: 0;
+	font-family: var(--display);
+	font-size: 20px;
+	line-height: 1.3;
+	color: var(--text);
+}
+.wr-headline .wr-you strong {
+	color: var(--accent);
+}
+.wr-headline .wr-you-empty {
+	color: var(--mute);
+	font-size: 16px;
+}
+.wr-headline .wr-field {
+	margin: 6px 0 0;
+	color: var(--dim);
+	font-size: 14px;
+}
+.wr-headline .wr-field strong {
+	color: var(--text);
+}
+
+/* clickable setter rows + your-row highlight */
+.wr-row {
+	cursor: pointer;
+}
+.wr-row:hover td {
+	background: var(--card-2);
+}
+.wr-row.you td {
+	background: var(--accent-soft);
+}
+.you-tag {
+	margin-left: 8px;
+	font-size: 10px;
+	font-weight: 800;
+	letter-spacing: 0.6px;
+	text-transform: uppercase;
+	color: var(--accent);
+	border: 1px solid var(--accent-line);
+	border-radius: 5px;
+	padding: 1px 5px;
+}
+.wr-detail-row td {
+	padding: 0 12px 14px;
+	background: var(--card-2);
+}
+
+/* per-setter lineup detail (lazy expand): position chip · official starter · points delta ·
+   setter's pick. Reuses .player / PlayerCard from the /lineups view. */
+.setter-detail {
+	padding: 2px 2px 4px;
+}
+.sd-row {
+	display: grid;
+	grid-template-columns: 44px minmax(0, 1fr) 56px minmax(0, 1fr);
+	align-items: center;
+	gap: 8px;
+	padding: 7px 16px;
+}
+.sd-row + .sd-row {
+	border-top: 1px solid #ffffff06;
+}
+.sd-row .pos {
+	justify-self: start;
+}
+.sd-delta {
+	display: grid;
+	place-items: center;
+}
+.sd-pick {
+	display: flex;
+	justify-content: flex-end;
+}
+.sd-row .player.dim .pname {
+	color: var(--mute);
+	text-decoration: line-through;
+	text-decoration-color: #ffffff22;
+}

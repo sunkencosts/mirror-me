@@ -2,6 +2,7 @@ import "./index.css";
 import "./shell.css";
 import "./lineups.css";
 import "./home.css";
+import "./leaderboard.css";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Agentation } from "agentation";
 import { StrictMode } from "react";
