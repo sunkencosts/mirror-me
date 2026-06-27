@@ -18,6 +18,17 @@ export default defineConfig({
 					}
 				},
 			},
+			"/leaderboard": {
+				target: "http://localhost:8080",
+				// /leaderboard is also a frontend page route, so let browser
+				// navigations (Accept: text/html) fall through to the SPA while
+				// JS fetches hit the API.
+				bypass: (req) => {
+					if (req.headers.accept?.includes("text/html")) {
+						return "/index.html";
+					}
+				},
+			},
 			"/lineups": "http://localhost:8080",
 			"/players": "http://localhost:8080",
 			"/league-bookmarks": "http://localhost:8080",

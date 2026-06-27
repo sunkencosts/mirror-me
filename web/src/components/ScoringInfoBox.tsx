@@ -4,7 +4,7 @@ interface ScoringInfoBoxProps {
 	global?: boolean;
 }
 
-/** Manager Score rules panel — shared by Best Setters and the global Leaderboard. */
+/** Ranking rules panel — shared by the per-league and global leaderboards. */
 export default function ScoringInfoBox({ global = false }: ScoringInfoBoxProps) {
 	return (
 		<div className="infobox">
@@ -12,25 +12,29 @@ export default function ScoringInfoBox({ global = false }: ScoringInfoBoxProps) 
 				<Icon name="info" />
 			</div>
 			<div>
-				<h4>How Manager Score works</h4>
+				<h4>How ranking works</h4>
 				<ol>
 					<li>
 						All picks <b>lock at the first kickoff</b> each week — no retroactive editing.
 					</li>
 					<li>
-						You <b>win a week</b> if your mirrored starters outscore what the real manager started.
+						Each week you score an <b className="k">efficiency</b> = your starters' points ÷ the
+						best possible lineup from that roster.
 					</li>
 					<li>
-						<b className="k">Manager Score</b> = the percentage of weeks you beat the real manager.
+						Your rank is your <b>average efficiency</b> across graded weeks.
 					</li>
 					<li>
-						<b>4 locked weeks</b> are required to qualify{global ? " for the leaderboard" : ""}.
+						<b>Edge</b> = how much your efficiency beats the real manager's, averaged — the brag.
 					</li>
+					{global && (
+						<li>
+							<b>3 graded weeks</b> are required to qualify for the leaderboard.
+						</li>
+					)}
 					<li>
-						Raw win rate is <b>regressed toward 50%</b> so small-sample flukes can't top a long
-						record.
+						<b>Win rate</b> (weeks you outscored the real manager) is shown as a secondary stat.
 					</li>
-					<li>Tiebreak: average points-gained margin per week.</li>
 				</ol>
 			</div>
 		</div>

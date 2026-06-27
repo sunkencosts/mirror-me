@@ -212,6 +212,34 @@ type WeekMatchup struct {
 	PlayerPoints map[string]float64 `json:"player_points"`
 }
 
+// OfficialTotal is the Sleeper-authoritative official total: custom_points when present,
+// otherwise points. This is the single source of truth for the rule.
+func (m WeekMatchup) OfficialTotal() float64 {
+	if m.CustomPoints != nil {
+		return *m.CustomPoints
+	}
+	return m.Points
+}
+
+// FindMatchup returns the matchup for rosterID, or nil if the roster is not in the week.
+func FindMatchup(matchups []WeekMatchup, rosterID int) *WeekMatchup {
+	for i := range matchups {
+		if matchups[i].RosterID == rosterID {
+			return &matchups[i]
+		}
+	}
+	return nil
+}
+
+// PlayerIDs extracts the player IDs from a slice of players.
+func PlayerIDs(players []Player) []string {
+	ids := make([]string, len(players))
+	for i, p := range players {
+		ids[i] = p.PlayerID
+	}
+	return ids
+}
+
 type ScoredPlayer struct {
 	Player
 	Points float64 `json:"points"`
@@ -237,6 +265,36 @@ type CompareResponse struct {
 	OfficialEfficiency float64 `json:"official_efficiency"`
 	Edge               float64 `json:"edge"`
 	Final              bool    `json:"final"`
+}
+
+// WeeklySetterResult is one user's graded result for a (league, week, roster) — a single
+// row in the weekly results browser, scored against that roster's official + optimal lineup.
+// Rank is the user's standing within the roster (by efficiency desc), independent of any
+// pagination/search applied to the returned slice.
+type WeeklySetterResult struct {
+	UserID     string  `json:"user_id"`
+	Username   string  `json:"username"`
+	UserTotal  float64 `json:"user_total"`
+	Efficiency float64 `json:"efficiency"` // clamp01(user_total/optimal_total)
+	Edge       float64 `json:"edge"`       // user efficiency - official efficiency
+	Result     string  `json:"result"`     // user | official | tie
+	Rank       int     `json:"rank"`       // 1-based standing within the roster
+}
+
+// WeeklyRosterResults is the weekly results for one roster: the official/optimal baseline
+// (shared by every setter of that roster-week) plus the setters who mirrored it, ranked by
+// efficiency. SetterCount is the unfiltered total (for "you beat N of M"); Setters may be a
+// searched/paginated subset. BeatOfficialCount is how many of those SetterCount setters
+// outscored the real manager (user_total > official_total) — the "X% of lineups beat the
+// original" headline. It is an aggregate over ALL setters, independent of search/pagination.
+type WeeklyRosterResults struct {
+	RosterID           int                  `json:"roster_id"`
+	OfficialTotal      float64              `json:"official_total"`
+	OptimalTotal       float64              `json:"optimal_total"`
+	OfficialEfficiency float64              `json:"official_efficiency"`
+	SetterCount        int                  `json:"setter_count"`
+	BeatOfficialCount  int                  `json:"beat_official_count"`
+	Setters            []WeeklySetterResult `json:"setters"`
 }
 
 // LeaderboardRow is one user's standing, aggregated over their graded weeks. MeanEfficiency

@@ -71,6 +71,10 @@ func run(ctx context.Context, getenv func(string) string, stdout, stderr io.Writ
 
 	currentWeek := newCurrentWeekResolver(store, cfg)
 	sleeperClient := sleeper.New(cfg.SleeperBaseURL, store, currentWeek)
+	// Persist final-week matchups in our DB so repeated reads (compare, per-setter lineup,
+	// grading, weekly browser) don't re-hit Sleeper's rate limit; the live week still passes
+	// through to Sleeper. Seeding week_matchups rows lets dev render real scores offline.
+	cachingSleeper := newCachingMatchups(sleeperClient, store, currentWeek)
 	googleClient := googleauth.New(googleauth.Config{
 		ClientID:     cfg.GoogleClientID,
 		ClientSecret: cfg.GoogleClientSecret,
@@ -90,7 +94,7 @@ func run(ctx context.Context, getenv func(string) string, stdout, stderr io.Writ
 		return fmt.Errorf("running migrations: %w", err)
 	}
 
-	srv := NewServer(sleeperClient, cfg, store, googleClient, logger, currentWeek)
+	srv := NewServer(cachingSleeper, cfg, store, googleClient, logger, currentWeek)
 
 	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", ":"+cfg.Port)
 	if err != nil {

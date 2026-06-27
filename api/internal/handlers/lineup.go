@@ -196,10 +196,16 @@ func HandleListLineups(store lineupStore) http.Handler {
 			http.Error(w, "missing league_id", http.StatusBadRequest)
 			return
 		}
-		weekNumber, err := strconv.Atoi(r.URL.Query().Get("week_number"))
-		if err != nil {
-			http.Error(w, "invalid week_number", http.StatusBadRequest)
-			return
+		// week_number is optional: omit it to list the user's lineups across all weeks (used to
+		// discover which weeks/rosters they've played). When present it must be a valid int.
+		weekNumber := 0
+		if raw := r.URL.Query().Get("week_number"); raw != "" {
+			n, err := strconv.Atoi(raw)
+			if err != nil {
+				http.Error(w, "invalid week_number", http.StatusBadRequest)
+				return
+			}
+			weekNumber = n
 		}
 
 		var rosterID *int
@@ -217,9 +223,10 @@ func HandleListLineups(store lineupStore) http.Handler {
 			http.Error(w, "failed to list lineups", http.StatusInternalServerError)
 			return
 		}
-		// All lineups in this result share one (season, week), so one lock lookup
-		// annotates them all.
-		if len(lineups) > 0 {
+		// When a specific week was requested, all lineups share one (season, week), so one lock
+		// lookup annotates them all. The all-weeks listing is for discovery only — skip the
+		// per-week lock annotation (it isn't meaningful across mixed weeks).
+		if weekNumber > 0 && len(lineups) > 0 {
 			locked, locksAt, lockErr := weekLocked(r.Context(), store, lineups[0].Season, weekNumber)
 			if lockErr == nil {
 				for i := range lineups {
@@ -264,7 +271,7 @@ func validateStarters(ctx context.Context, p lineupMatchupProvider, leagueID str
 		// No matchup data published for this week yet — skip validation (D17).
 		return nil
 	}
-	matchup := findMatchup(matchups, rosterID)
+	matchup := provider.FindMatchup(matchups, rosterID)
 	if matchup == nil {
 		return fmt.Errorf("roster %d not found in league for week %d", rosterID, week)
 	}

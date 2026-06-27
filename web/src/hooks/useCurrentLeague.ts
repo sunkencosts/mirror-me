@@ -9,7 +9,7 @@ export interface CurrentLeague {
 	leagueId: string | null;
 	/** Whether the current route is league-scoped. */
 	isLeagueRoute: boolean;
-	/** Active route key (home, lineups, stats, …). */
+	/** Active route key (home, lineups, results, …). */
 	routeKey: string;
 }
 

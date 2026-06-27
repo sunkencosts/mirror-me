@@ -57,7 +57,7 @@ export default function MyLeaguesPage() {
 			<div className="home-hero">
 				<h1>Same roster. Same matchups. Different manager.</h1>
 				<p>
-					Mirror League copies any public Sleeper roster into your own lineup. Set your starters for
+					Mirror League copies any public Sleeper roster and lets you set you tinker with any manager's lineup. Set your starters for
 					the week, then compare your score to what the real manager actually played and see who's
 					the better GM.
 				</p>

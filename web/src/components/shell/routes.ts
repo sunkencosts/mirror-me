@@ -57,20 +57,12 @@ export const LEAGUE_ROUTES: RouteDef[] = [
 		to: (id) => `/${id}/teams`,
 	},
 	{
-		key: "stats",
-		title: "League Stats",
+		key: "results",
+		title: "Results",
 		scope: "league",
 		navIcon: "chart",
-		navLabel: "League Stats",
-		to: (id) => `/${id}/stats`,
-	},
-	{
-		key: "setters",
-		title: "Best Setters",
-		scope: "league",
-		navIcon: "medal",
-		navLabel: "Best Setters",
-		to: (id) => `/${id}/best-setters`,
+		navLabel: "Results",
+		to: (id) => `/${id}/results`,
 	},
 ];
 
@@ -78,8 +70,7 @@ export const ALL_ROUTES: RouteDef[] = [...GLOBAL_ROUTES, ...LEAGUE_ROUTES];
 
 const LEAGUE_SEGMENT_TO_KEY: Record<string, string> = {
 	lineups: "lineups",
-	stats: "stats",
-	"best-setters": "setters",
+	results: "results",
 	teams: "members",
 };
 

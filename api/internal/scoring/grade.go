@@ -48,8 +48,8 @@ func GradeWeek(in GradeInput) WeekGrade {
 	}
 
 	if optimalTotal > 0 {
-		g.UserEfficiency = clamp01(userTotal / optimalTotal)
-		g.OfficialEfficiency = clamp01(officialTotal / optimalTotal)
+		g.UserEfficiency = Clamp01(userTotal / optimalTotal)
+		g.OfficialEfficiency = Clamp01(officialTotal / optimalTotal)
 		g.Edge = g.UserEfficiency - g.OfficialEfficiency
 	}
 
@@ -72,7 +72,9 @@ func sumPoints(ids []string, points map[string]float64) float64 {
 	return total
 }
 
-func clamp01(v float64) float64 {
+// Clamp01 constrains v to the [0,1] range. It is the canonical efficiency clamp shared
+// by GradeWeek and the leaderboard/weekly-results aggregation in the db package.
+func Clamp01(v float64) float64 {
 	if v < 0 {
 		return 0
 	}
