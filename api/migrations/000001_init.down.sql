@@ -1,3 +1,5 @@
+DROP TABLE IF EXISTS week_results;
+
 DROP TABLE IF EXISTS users;
 
 DROP TABLE IF EXISTS week_locks;

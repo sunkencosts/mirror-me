@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS leagues;
+
+DROP TABLE IF EXISTS week_matchups;
