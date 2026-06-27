@@ -1,6 +1,5 @@
 import { useCurrentLeague } from "../../hooks/useCurrentLeague";
 import { useLeagueName } from "../../hooks/useLeagueName";
-import { Icon } from "../icons";
 import { routeByKey } from "./routes";
 
 export default function Topbar() {
@@ -20,11 +19,7 @@ export default function Topbar() {
 					{title}
 				</div>
 			</div>
-			<div className="topbar-right">
-				<button type="button" className="icon-btn" title="Help">
-					<Icon name="info" />
-				</button>
-			</div>
+
 		</div>
 	);
 }
