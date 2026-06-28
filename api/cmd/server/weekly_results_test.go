@@ -153,10 +153,10 @@ func TestWeeklyResults(t *testing.T) {
 	})
 }
 
-// --- endpoint B: GET /league/{id}/week/{week}/roster/{rosterId}/lineup?user_id= (public)
+// --- endpoint B: GET /league/{id}/week/{week}/roster/{rosterId}/score?user_id= (public)
 func TestSetterLineup(t *testing.T) {
 	baseURL, _ := gradedWorld(t)
-	const lineupURL = "/league/" + leagueStd + "/week/1/roster/1/lineup"
+	const lineupURL = "/league/" + leagueStd + "/week/1/roster/1/score"
 
 	t.Run("ScoredUserAndOfficial", func(t *testing.T) {
 		resp, err := http.Get(baseURL + lineupURL + "?user_id=" + uid(1))

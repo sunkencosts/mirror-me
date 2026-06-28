@@ -50,7 +50,7 @@ func addRoutes(mux *http.ServeMux, sleeperClient sleeperDeps, store *db.Store, c
 	mux.Handle("GET /league/{leagueId}/rosters", handlers.HandleGetRosters(sleeperClient))
 	mux.Handle("GET /league/{leagueId}/week/{week}", handlers.HandleGetWeekMatchups(sleeperClient, store))
 	mux.Handle("GET /league/{leagueId}/week/{week}/roster/{rosterId}/compare", requireAuth(handlers.HandleGetCompare(sleeperClient, store, currentWeek)))
-	mux.Handle("GET /league/{leagueId}/week/{week}/roster/{rosterId}/lineup", handlers.HandleSetterLineup(sleeperClient, store, currentWeek))
+	mux.Handle("GET /league/{leagueId}/week/{week}/roster/{rosterId}/score", handlers.HandleSetterLineup(sleeperClient, store, currentWeek))
 	mux.Handle("GET /league/{leagueId}/week/{week}/results", handlers.HandleWeeklyResults(store, cfg.CurrentSeason))
 	mux.Handle("GET /leaderboard", handlers.HandleGlobalLeaderboard(store, cfg.CurrentSeason))
 	mux.Handle("GET /league/{leagueId}/leaderboard", handlers.HandleLeagueLeaderboard(store, cfg.CurrentSeason))

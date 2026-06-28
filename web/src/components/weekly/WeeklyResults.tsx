@@ -1,5 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
-import { Fragment, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
 import { fetchJson } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import type {
@@ -18,6 +19,9 @@ import WeekSelector from "../WeekSelector";
 import SetterLineupDetail from "./SetterLineupDetail";
 
 const SEASON = "2026";
+// Last week you can scroll the selector to (NFL regular season). Weeks past the latest graded one
+// just show a "not scored yet" message; this is also the ceiling we clamp a shared ?week= to.
+const SEASON_WEEKS = 18;
 const RESULT_LABEL: Record<string, string> = { user: "Won", official: "Lost", tie: "Tie" };
 
 // Points margin over the manager, e.g. "+12.4" / "-3.1".
@@ -29,7 +33,7 @@ export default function WeeklyResults({ leagueId }: { leagueId: string }) {
 	const { userId, user } = useAuth();
 	const isLoggedIn = !!user;
 
-	const { data: league } = useQuery<League>({
+	const { data: league, isLoading: leagueLoading } = useQuery<League>({
 		queryKey: ["league", leagueId],
 		queryFn: () => fetchJson(`/league/${leagueId}`),
 		enabled: !!leagueId,
@@ -46,7 +50,7 @@ export default function WeeklyResults({ leagueId }: { leagueId: string }) {
 
 	// Every lineup the signed-in user set in this league (all weeks, newest first). Used to land
 	// them on the week/team they actually played and to score that lineup live.
-	const { data: myLineups = [] } = useQuery<Lineup[]>({
+	const { data: myLineups = [], isLoading: myLineupsLoading } = useQuery<Lineup[]>({
 		queryKey: ["my-lineups-all", leagueId, userId],
 		queryFn: () => fetchJson(`/lineups?user_id=${userId}&league_id=${leagueId}`),
 		enabled: !!leagueId && !!userId,
@@ -56,8 +60,45 @@ export default function WeeklyResults({ leagueId }: { leagueId: string }) {
 		.filter((w) => w >= 1 && w <= latestGraded);
 	const myLatestPlayedWeek = myPlayedWeeks.length ? Math.max(...myPlayedWeeks) : null;
 
-	const [weekOverride, setWeekOverride] = useState<number | null>(null);
-	const week = weekOverride ?? myLatestPlayedWeek ?? latestGraded;
+	// Week lives in the URL (?week=N) so a result view is shareable. Falls back to the user's latest
+	// played week, then the latest graded week.
+	const [searchParams, setSearchParams] = useSearchParams();
+	const weekParam = searchParams.get("week");
+	// Clamp a shared / hand-edited ?week= into a real week so every downstream consumer (queries,
+	// selector, render branch) is correct by construction rather than each defending itself.
+	const parsedWeek = weekParam && /^\d+$/.test(weekParam) ? Number(weekParam) : null;
+	const weekFromUrl = parsedWeek === null ? null : Math.min(Math.max(parsedWeek, 1), SEASON_WEEKS);
+	const week = weekFromUrl ?? myLatestPlayedWeek ?? latestGraded;
+
+	// Only weeks up to latestGraded have final scores. The selector still lets you scroll into the
+	// current/in-progress week; we show a "not scored yet" message there instead of an empty field.
+	const scored = week <= latestGraded;
+
+	// Don't fire the week-dependent queries until both `league` (sets latestGraded) and `myLineups`
+	// (sets myLatestPlayedWeek) have settled — otherwise we land on latestGraded for one render and
+	// fire a request for a week the user never played (a 404 + a visible flash to their real week).
+	// myLineupsLoading is false when the query is disabled (logged-out), so this is true immediately
+	// for anonymous visitors.
+	const weekReady = !leagueLoading && !myLineupsLoading;
+
+	// Single place that owns "the selected week is a URL param" — both the default-week sync and the
+	// week selector write through here.
+	const goToWeek = useCallback(
+		(nextWeek: number, replace = false) => {
+			const next = new URLSearchParams(searchParams);
+			next.set("week", String(nextWeek));
+			setSearchParams(next, { replace });
+		},
+		[searchParams, setSearchParams],
+	);
+
+	// Once we've resolved the default week, write it into the URL (without a history entry) so the
+	// bare /results link a user lands on becomes a shareable, week-pinned link.
+	useEffect(() => {
+		if (weekReady && weekFromUrl === null) {
+			goToWeek(week, true);
+		}
+	}, [weekReady, weekFromUrl, week, goToWeek]);
 
 	const myRosterForWeek = myLineups.find((l) => l.week_number === week)?.roster_id ?? null;
 	const [rosterOverride, setRosterOverride] = useState<number | null>(null);
@@ -66,13 +107,39 @@ export default function WeeklyResults({ leagueId }: { leagueId: string }) {
 	const [query, setQuery] = useState("");
 	const [expanded, setExpanded] = useState<string | null>(null);
 
-	const { data: results, isLoading } = useQuery<WeeklyRosterResults>({
-		queryKey: ["weekly-results", leagueId, week, activeRosterId, query],
+	// The full, UNFILTERED field for this (week, roster). Drives the personal headline, the baseline
+	// KPIs, and the live-me injection — none of which should ever change when the user searches. The
+	// server already computes setter_count, beat_official_count and each setter's rank over the whole
+	// field, so these stay correct regardless of the search box.
+	const {
+		data: field,
+		isLoading,
+		isFetching: fieldFetching,
+	} = useQuery<WeeklyRosterResults>({
+		queryKey: ["weekly-results", leagueId, week, activeRosterId],
 		queryFn: () =>
 			fetchJson(
-				`/league/${leagueId}/week/${week}/results?roster_id=${activeRosterId}&season=${SEASON}&q=${encodeURIComponent(query)}`,
+				`/league/${leagueId}/week/${week}/results?roster_id=${activeRosterId}&season=${SEASON}`,
 			),
-		enabled: !!leagueId && activeRosterId !== null,
+		enabled: !!leagueId && activeRosterId !== null && weekReady && scored,
+		// Keep the current rows on screen while a new week/team refetches, so the table doesn't unmount
+		// into a "Loading…" flash. isFetching drives an indeterminate bar instead; the full "Loading…"
+		// branch is reached only on the genuine first load.
+		placeholderData: keepPreviousData,
+	});
+
+	// The searched view filters only the visible table rows (server-side, so it spans the whole field,
+	// not just the first page). Runs only while there's a query; otherwise we show the full field.
+	const searchTerm = query.trim();
+	const searching = searchTerm !== "";
+	const { data: searchResults, isFetching: searchFetching } = useQuery<WeeklyRosterResults>({
+		queryKey: ["weekly-results-search", leagueId, week, activeRosterId, searchTerm],
+		queryFn: () =>
+			fetchJson(
+				`/league/${leagueId}/week/${week}/results?roster_id=${activeRosterId}&season=${SEASON}&q=${encodeURIComponent(searchTerm)}`,
+			),
+		enabled: !!leagueId && activeRosterId !== null && weekReady && scored && searching,
+		placeholderData: keepPreviousData,
 	});
 
 	// Score the signed-in user's own lineup live (same path as the Lineups page) so it appears the
@@ -82,20 +149,20 @@ export default function WeeklyResults({ leagueId }: { leagueId: string }) {
 		queryKey: ["my-week-result", leagueId, week, activeRosterId, userId],
 		queryFn: () =>
 			fetchJson(
-				`/league/${leagueId}/week/${week}/roster/${activeRosterId}/lineup?user_id=${userId}`,
+				`/league/${leagueId}/week/${week}/roster/${activeRosterId}/score?user_id=${userId}`,
 			),
-		enabled: isLoggedIn && !!leagueId && activeRosterId !== null,
+		enabled: isLoggedIn && !!leagueId && activeRosterId !== null && weekReady && scored,
 		retry: false,
 	});
 
 	const roster = rosters.find((r) => r.roster_id === activeRosterId);
 	const teamName = roster?.team_name || (activeRosterId ? `Team ${activeRosterId}` : "");
 
-	const gradedSetters = results?.setters ?? [];
+	const gradedSetters = field?.setters ?? [];
 	const gradedMe = gradedSetters.find((setter) => setter.user_id === userId);
-	// Inject the user's live result into the field only when they have one, aren't already graded,
-	// and aren't searching (search filters the field server-side, so injecting would be confusing).
-	const injectLiveMe = isLoggedIn && !!myResult && !gradedMe && query.trim() === "";
+	// Inject the user's live result into the field only when they have one and aren't already graded.
+	// This feeds the personal headline + KPIs, which are independent of the search box.
+	const injectLiveMe = isLoggedIn && !!myResult && !gradedMe;
 	const liveMeRow: WeeklySetterResult | null =
 		injectLiveMe && myResult
 			? {
@@ -118,16 +185,21 @@ export default function WeeklyResults({ leagueId }: { leagueId: string }) {
 
 	// Baseline (manager/optimal) comes from the graded field; if nobody else is graded for this
 	// roster-week, fall back to the user's own live compare so a solo setter still sees a baseline.
-	const hasField = !!results && results.setter_count > 0;
-	const officialTotal = hasField ? results.official_total : (myResult?.official.total_points ?? 0);
-	const optimalTotal = hasField ? results.optimal_total : (myResult?.optimal_points ?? 0);
+	const hasField = !!field && field.setter_count > 0;
+	const officialTotal = hasField ? field.official_total : (myResult?.official.total_points ?? 0);
+	const optimalTotal = hasField ? field.optimal_total : (myResult?.optimal_points ?? 0);
 
-	const totalLineups = (hasField ? results.setter_count : 0) + (injectLiveMe ? 1 : 0);
+	const totalLineups = (hasField ? field.setter_count : 0) + (injectLiveMe ? 1 : 0);
 	const beatCount =
-		(hasField ? results.beat_official_count : 0) +
+		(hasField ? field.beat_official_count : 0) +
 		(injectLiveMe && myResult?.winner === "user" ? 1 : 0);
 	const beatPct = totalLineups ? Math.round((beatCount / totalLineups) * 100) : 0;
 	const youRow = displaySetters.find((setter) => setter.user_id === userId);
+
+	// The rows the table renders: the searched subset while searching, else the full field (with the
+	// live-me row injected). Either way each row's rank is its position in the whole field.
+	const visibleSetters = searching ? (searchResults?.setters ?? []) : displaySetters;
+	const showProgress = fieldFetching || searchFetching;
 
 	function toggleExpanded(setter: WeeklySetterResult) {
 		setExpanded((current) => (current === setter.user_id ? null : setter.user_id));
@@ -148,11 +220,11 @@ export default function WeeklyResults({ leagueId }: { leagueId: string }) {
 				/>
 				<WeekSelector
 					weekNumber={week}
-					onWeekChange={(w) => {
-						setWeekOverride(w);
+					onWeekChange={(nextWeek) => {
+						goToWeek(nextWeek);
 						setExpanded(null);
 					}}
-					max={latestGraded}
+					max={SEASON_WEEKS}
 				/>
 				<label className="wr-search">
 					<Icon name="search" />
@@ -165,8 +237,14 @@ export default function WeeklyResults({ leagueId }: { leagueId: string }) {
 				</label>
 			</div>
 
-			{isLoading ? (
+			{isLoading || !weekReady ? (
 				<p>Loading…</p>
+			) : !scored ? (
+				<div className="panel">
+					<div className="lb-empty">
+						Week {week} hasn't been scored yet. Check back once the games are final.
+					</div>
+				</div>
 			) : !hasField && !injectLiveMe ? (
 				<div className="panel">
 					<div className="lb-empty">
@@ -219,7 +297,8 @@ export default function WeeklyResults({ leagueId }: { leagueId: string }) {
 						</div>
 					</div>
 
-					<div className="panel">
+					<div className="panel wr-results">
+						{showProgress && <div className="wr-progress" role="presentation" />}
 						<div className="table-wrap">
 							<table className="rk-table">
 								<thead>
@@ -233,7 +312,14 @@ export default function WeeklyResults({ leagueId }: { leagueId: string }) {
 									</tr>
 								</thead>
 								<tbody>
-									{displaySetters.map((setter) => {
+									{searching && visibleSetters.length === 0 && (
+										<tr>
+											<td colSpan={6} className="lb-empty">
+												No managers match “{searchTerm}”.
+											</td>
+										</tr>
+									)}
+									{visibleSetters.map((setter) => {
 										const isYou = setter.user_id === userId;
 										const isOpen = expanded === setter.user_id;
 										return (

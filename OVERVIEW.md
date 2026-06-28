@@ -88,6 +88,7 @@ The core "set your own lineup" feature. A lineup is a set of starter player IDs 
 | GET | `/league/{leagueId}/rosters` | Rosters with resolved player objects (name, team, image, rarity) and team names; includes starters/reserve/taxi |
 | GET | `/league/{leagueId}/week/{week}` | Week matchups **enveloped** with lock state: `{ locked, locks_at, matchups: [...] }`. This is the editor's source of truth for whether edits are allowed |
 | GET | `/league/{leagueId}/week/{week}/roster/{rosterId}/compare?user_id=` | **The payoff endpoint.** Scores the user's submitted lineup vs the official lineup using Sleeper's per-player points; returns both scored lineups + winner (`official`/`user`/`tie`). 404 if no lineup submitted |
+| GET | `/league/{leagueId}/week/{week}/roster/{rosterId}/score?user_id=` | Public sibling of `/compare` (no auth; user taken from the query param). Shares the same scoring path, so the two never drift. Powers the weekly-results per-setter score + drill-down. 404 if that user submitted no lineup |
 
 ### Players & admin & health
 | Method | Path | Purpose |

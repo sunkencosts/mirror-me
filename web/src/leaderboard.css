@@ -174,6 +174,48 @@
 	grid-template-columns: repeat(3, 1fr);
 }
 
+/* indeterminate progress bar pinned to the inside top edge of the results panel while a
+   search/week refetch is in flight (the rows underneath stay visible). Lives inside .panel so
+   it tucks within the rounded border instead of floating over it. */
+.wr-results {
+	position: relative;
+}
+.wr-progress {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 3px;
+	overflow: hidden;
+	/* match the panel's top corners so the bar reads as part of the table frame */
+	border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
+	background: var(--accent-soft);
+	z-index: 2;
+}
+.wr-progress::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 35%;
+	border-radius: inherit;
+	background: var(--accent);
+	animation: wr-indeterminate 1.05s ease-in-out infinite;
+}
+@keyframes wr-indeterminate {
+	0% {
+		left: -35%;
+	}
+	100% {
+		left: 100%;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.wr-progress::before {
+		animation-duration: 2.1s;
+	}
+}
+
 /* personal headline: the "you set the Nth best lineup" banner above the field */
 .wr-headline {
 	background: var(--card);

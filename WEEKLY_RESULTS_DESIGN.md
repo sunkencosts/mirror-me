@@ -64,7 +64,7 @@ DB method: `WeeklyResults(ctx, season, leagueID string, rosterID int, q string, 
 - `TestWeeklyResults_SeasonScoped` — only the requested season's rows.
 
 ### Endpoint B — one setter's scored lineup (public)
-`GET /league/{leagueId}/week/{week}/roster/{rosterId}/lineup?user_id=`
+`GET /league/{leagueId}/week/{week}/roster/{rosterId}/score?user_id=`
 → `{ user: ScoredLineup, official: ScoredLineup, optimal_total, user_efficiency,
 official_efficiency, edge, result, final }` (the `CompareResponse` shape).
 

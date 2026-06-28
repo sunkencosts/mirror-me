@@ -70,7 +70,7 @@ export default function SetterLineupDetail({ leagueId, week, rosterId, userId, u
 	const { data, isLoading, isError } = useQuery<CompareResponse>({
 		queryKey: ["setter-lineup", leagueId, week, rosterId, userId],
 		queryFn: () =>
-			fetchJson(`/league/${leagueId}/week/${week}/roster/${rosterId}/lineup?user_id=${userId}`),
+			fetchJson(`/league/${leagueId}/week/${week}/roster/${rosterId}/score?user_id=${userId}`),
 	});
 
 	if (isLoading) {
