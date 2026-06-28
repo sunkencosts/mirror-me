@@ -9,5 +9,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build
         run: cd api && go build -o ~/apps/mirrorleague/server ./cmd/server
+      - name: Sync migrations to app dir
+        run: |
+          rm -rf ~/apps/mirrorleague/api/migrations
+          mkdir -p ~/apps/mirrorleague/api
+          cp -r api/migrations ~/apps/mirrorleague/api/migrations
       - name: Restart service
         run: sudo systemctl restart mirrorleague
