@@ -170,9 +170,11 @@ func TestCachingMatchups(t *testing.T) {
 		const leagueID = "cache-league"
 		store := cacheTestStore(t, leagueID)
 		positions := []string{"QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "K", "DEF", "BN"}
-		if err := store.SaveLeague(ctx, provider.League{
+		league := provider.League{
 			LeagueID: leagueID, Name: "Cached", Season: "2026", RosterPositions: positions,
-		}); err != nil {
+		}
+		league.Settings.NumTeams = 12
+		if err := store.SaveLeague(ctx, league); err != nil {
 			t.Fatalf("seed league: %v", err)
 		}
 
@@ -188,6 +190,9 @@ func TestCachingMatchups(t *testing.T) {
 		}
 		if len(got.RosterPositions) != len(positions) || got.RosterPositions[6] != "FLEX" {
 			t.Errorf("unexpected roster positions: %+v", got.RosterPositions)
+		}
+		if got.Settings.NumTeams != 12 {
+			t.Errorf("expected num_teams 12 to survive the cache, got %d", got.Settings.NumTeams)
 		}
 	})
 

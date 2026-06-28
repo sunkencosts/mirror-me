@@ -35,7 +35,7 @@ func addRoutes(mux *http.ServeMux, sleeperClient sleeperDeps, store *db.Store, c
 	mux.Handle("POST /auth/merge", requireAuth(handlers.HandleMerge(store)))
 	mux.Handle("DELETE /auth/logout", handlers.HandleLogout(googleClient.IsSecure()))
 	if cfg.AppEnv == "development" {
-		mux.Handle("GET /dev/login", handlers.HandleDevLogin(jwtSecret, cfg.FrontendURL))
+		mux.Handle("GET /dev/login", handlers.HandleDevLogin(jwtSecret, cfg.FrontendURL, cfg.DevLoginUserID, cfg.DevLoginEmail, cfg.DevLoginUsername))
 	}
 
 	mux.Handle("POST /league-bookmarks", handlers.HandleSaveUserLeague(store))

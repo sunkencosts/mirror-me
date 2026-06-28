@@ -21,6 +21,12 @@ type Config struct {
 	JWTSecret          string
 	AdminSecret        string
 	LogFile            string
+	// DevLogin* are the identity /dev/login mints by default. They mirror the seed's
+	// SEED_PRIMARY_* env so dev-login "is" the same primary account seed-dev bookmarks and
+	// gives lineups to. Default to the fixed dev_user when unset.
+	DevLoginUserID   string
+	DevLoginUsername string
+	DevLoginEmail    string
 }
 
 func Load(getenv func(string) string) Config {
@@ -73,6 +79,18 @@ func Load(getenv func(string) string) Config {
 	if frontendURL == "" {
 		frontendURL = "http://localhost:5173"
 	}
+	devLoginUserID := getenv("SEED_PRIMARY_USER_ID")
+	if devLoginUserID == "" {
+		devLoginUserID = "00000000-0000-0000-0000-000000000001"
+	}
+	devLoginUsername := getenv("SEED_PRIMARY_USERNAME")
+	if devLoginUsername == "" {
+		devLoginUsername = "dev_user"
+	}
+	devLoginEmail := getenv("SEED_PRIMARY_EMAIL")
+	if devLoginEmail == "" {
+		devLoginEmail = "dev@localhost"
+	}
 	return Config{
 		AppEnv:             getenv("APP_ENV"),
 		Port:               port,
@@ -92,5 +110,8 @@ func Load(getenv func(string) string) Config {
 		JWTSecret:          getenv("JWT_SECRET"),
 		AdminSecret:        getenv("ADMIN_SECRET"),
 		LogFile:            getenv("LOG_FILE"),
+		DevLoginUserID:     devLoginUserID,
+		DevLoginUsername:   devLoginUsername,
+		DevLoginEmail:      devLoginEmail,
 	}
 }

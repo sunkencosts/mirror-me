@@ -464,19 +464,21 @@ func (s *Store) SaveWeekMatchups(ctx context.Context, leagueID string, week int,
 }
 
 // GetCachedLeague returns the persisted shape of a league (its roster_positions, name,
-// season, current leg). ok is false when the league isn't cached. Only the fields the app
-// actually consumes downstream (positions for scoring, season, leg for the current-week
-// display) are reconstructed; the rest of provider.League stays zero.
+// season, current leg, team count). ok is false when the league isn't cached. Only the fields
+// the app actually consumes downstream (positions for scoring, season, leg for the
+// current-week display, num_teams for the My Leagues card) are reconstructed; the rest of
+// provider.League stays zero.
 func (s *Store) GetCachedLeague(ctx context.Context, leagueID string) (provider.League, bool, error) {
 	var (
 		name, season    string
 		leg             int
+		numTeams        int
 		rosterPositions []string
 	)
 	err := s.pool.QueryRow(ctx, `
-		SELECT name, season, leg, roster_positions
+		SELECT name, season, leg, num_teams, roster_positions
 		FROM leagues
-		WHERE league_id = $1`, leagueID).Scan(&name, &season, &leg, &rosterPositions)
+		WHERE league_id = $1`, leagueID).Scan(&name, &season, &leg, &numTeams, &rosterPositions)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return provider.League{}, false, nil
 	}
@@ -490,6 +492,7 @@ func (s *Store) GetCachedLeague(ctx context.Context, leagueID string) (provider.
 		RosterPositions: rosterPositions,
 	}
 	league.Settings.Leg = leg
+	league.Settings.NumTeams = numTeams
 	return league, true, nil
 }
 
@@ -497,12 +500,14 @@ func (s *Store) GetCachedLeague(ctx context.Context, leagueID string) (provider.
 // (grading, the per-setter compare) skip Sleeper's /league endpoint.
 func (s *Store) SaveLeague(ctx context.Context, league provider.League) error {
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO leagues (league_id, name, season, leg, roster_positions, fetched_at)
-		VALUES ($1, $2, $3, $4, $5, now())
+		INSERT INTO leagues (league_id, name, season, leg, num_teams, roster_positions, fetched_at)
+		VALUES ($1, $2, $3, $4, $5, $6, now())
 		ON CONFLICT (league_id) DO UPDATE SET
 		  name = EXCLUDED.name, season = EXCLUDED.season, leg = EXCLUDED.leg,
-		  roster_positions = EXCLUDED.roster_positions, fetched_at = now()`,
-		league.LeagueID, league.Name, league.Season, league.Settings.Leg, league.RosterPositions)
+		  num_teams = EXCLUDED.num_teams, roster_positions = EXCLUDED.roster_positions,
+		  fetched_at = now()`,
+		league.LeagueID, league.Name, league.Season, league.Settings.Leg,
+		league.Settings.NumTeams, league.RosterPositions)
 	if err != nil {
 		return fmt.Errorf("saving league %s: %w", league.LeagueID, err)
 	}

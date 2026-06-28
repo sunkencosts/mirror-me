@@ -38,32 +38,65 @@ import (
 // synthetic but consistent.
 const (
 	devLeagueID    = "1182073403987832832"
-	devLeagueLabel = "The Mirror Keepers"
+	devLeagueLabel = "Seeded by dev"
 	season         = "2026"
 	weeksPlayed    = 8
 	seededLeg      = weeksPlayed + 1 // currentWeek = 9 → weeks 1..8 are final/graded
 )
 
-// devUser is one seeded account. The first id matches the fixed subject minted by /dev/login,
-// so the dev-login session "is" dev_user and sees its own lineups highlighted.
+// devUser is one seeded account. devUsers[0] is the "primary" account — the one bookmarked and
+// treated as you. By default its id matches the fixed subject minted by /dev/login, so a
+// dev-login session "is" the primary user and sees its own lineups highlighted. The primary's
+// fields can be overridden from the environment (see applyPrimaryUserOverride) so a real
+// account becomes the seeded primary. Crucially, setting provider+oauthID to your real Google
+// identity makes the binding PERMANENT: Google login resolves by (oauth_provider, oauth_id), so
+// every login returns this fixed id no matter how many times you reseed. provider "" → "dev",
+// oauthID "" → "dev-"+username, email "" → username+"@dev.local".
 type devUser struct {
 	id       string
 	username string
+	email    string
+	provider string
+	oauthID  string
 }
 
 var devUsers = []devUser{
-	{"00000000-0000-0000-0000-000000000001", "dev_user"},
-	{"00000000-0000-0000-0000-0000000000d1", "ana_sharp"},
-	{"00000000-0000-0000-0000-0000000000d2", "ben_steady"},
-	{"00000000-0000-0000-0000-0000000000d3", "cora_clutch"},
-	{"00000000-0000-0000-0000-0000000000d4", "dan_dart"},
-	{"00000000-0000-0000-0000-0000000000d5", "evan_eh"},
-	{"00000000-0000-0000-0000-0000000000d6", "fiona_fresh"},
-	{"00000000-0000-0000-0000-0000000000d7", "gabe_grit"},
-	{"00000000-0000-0000-0000-0000000000d8", "hana_heat"},
-	{"00000000-0000-0000-0000-0000000000d9", "iggy_iso"},
-	{"00000000-0000-0000-0000-0000000000da", "juno_jet"},
-	{"00000000-0000-0000-0000-0000000000db", "kai_klutch"},
+	{"00000000-0000-0000-0000-000000000001", "dev_user", "", "", ""},
+	{"00000000-0000-0000-0000-0000000000d1", "ana_sharp", "", "", ""},
+	{"00000000-0000-0000-0000-0000000000d2", "ben_steady", "", "", ""},
+	{"00000000-0000-0000-0000-0000000000d3", "cora_clutch", "", "", ""},
+	{"00000000-0000-0000-0000-0000000000d4", "dan_dart", "", "", ""},
+	{"00000000-0000-0000-0000-0000000000d5", "evan_eh", "", "", ""},
+	{"00000000-0000-0000-0000-0000000000d6", "fiona_fresh", "", "", ""},
+	{"00000000-0000-0000-0000-0000000000d7", "gabe_grit", "", "", ""},
+	{"00000000-0000-0000-0000-0000000000d8", "hana_heat", "", "", ""},
+	{"00000000-0000-0000-0000-0000000000d9", "iggy_iso", "", "", ""},
+	{"00000000-0000-0000-0000-0000000000da", "juno_jet", "", "", ""},
+	{"00000000-0000-0000-0000-0000000000db", "kai_klutch", "", "", ""},
+}
+
+// applyPrimaryUserOverride rebinds devUsers[0] (the bookmarked "you" account) from the
+// environment so a real logged-in identity can be the seeded primary. For a PERMANENT binding,
+// set SEED_PRIMARY_OAUTH_PROVIDER=google and SEED_PRIMARY_OAUTH_ID=<your Google sub> alongside a
+// fixed SEED_PRIMARY_USER_ID: because Google login upserts on (oauth_provider, oauth_id) and
+// RETURNs the existing id, every future login resolves back to SEED_PRIMARY_USER_ID — surviving
+// logout/re-auth and reseeds alike. (The sub is stable per Google account + OAuth client.)
+func applyPrimaryUserOverride(getenv func(string) string) {
+	if v := getenv("SEED_PRIMARY_USER_ID"); v != "" {
+		devUsers[0].id = v
+	}
+	if v := getenv("SEED_PRIMARY_USERNAME"); v != "" {
+		devUsers[0].username = v
+	}
+	if v := getenv("SEED_PRIMARY_OAUTH_PROVIDER"); v != "" {
+		devUsers[0].provider = v
+	}
+	if v := getenv("SEED_PRIMARY_OAUTH_ID"); v != "" {
+		devUsers[0].oauthID = v
+	}
+	if v := getenv("SEED_PRIMARY_EMAIL"); v != "" {
+		devUsers[0].email = v
+	}
 }
 
 // mirror describes one user mirroring a roster. rosterIdx indexes into the league's sorted
@@ -107,6 +140,14 @@ func main() {
 func run() error {
 	ctx := context.Background()
 	cfg := config.Load(os.Getenv)
+	applyPrimaryUserOverride(os.Getenv)
+
+	// seeddev truncates user-owned tables (see resetSeedTables), so refuse to run anywhere but
+	// development — a stray DATABASE_URL pointed at a shared/prod DB would otherwise wipe real
+	// accounts, lineups, and bookmarks. Mirrors the APP_ENV gate on the /dev/login route.
+	if cfg.AppEnv != "development" {
+		return fmt.Errorf("seeddev refuses to run with APP_ENV=%q (it truncates user data); set APP_ENV=development", cfg.AppEnv)
+	}
 
 	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -114,6 +155,14 @@ func run() error {
 	}
 	defer pool.Close()
 	store := db.NewStore(pool)
+
+	// Wipe the seed-owned tables first so the seed is idempotent: re-running it (or running it
+	// without a full db-reset) reproduces an identical state instead of colliding with the
+	// lineups unique constraint. Also clears any stray anonymous-session lineups. players is
+	// owned by seed-players, not us, so it is left alone.
+	if err := resetSeedTables(ctx, pool); err != nil {
+		return err
+	}
 
 	currentWeek := func(context.Context) int { return seededLeg }
 	sleeperClient := sleeper.New(cfg.SleeperBaseURL, store, currentWeek)
@@ -144,6 +193,13 @@ func run() error {
 		return err
 	}
 
+	// Bookmark the league for the dev user so it shows on My Leagues. Done before the lineup
+	// loop so the bookmark is never lost to a mid-loop failure (the dropdown is driven by this
+	// row, and an empty dropdown after a "successful enough" seed is a confusing footgun).
+	if _, err := store.SaveUserLeague(ctx, devUsers[0].id, devLeagueID, "sleeper", devLeagueLabel); err != nil {
+		return fmt.Errorf("bookmarking league: %w", err)
+	}
+
 	// Seed week_matchups for every roster × week (the per-player scores everything derives from).
 	for _, roster := range rosters {
 		for week := 1; week <= weeksPlayed; week++ {
@@ -171,11 +227,6 @@ func run() error {
 		}
 	}
 
-	// Bookmark the league for the dev user so it shows on My Leagues.
-	if _, err := store.SaveUserLeague(ctx, devUsers[0].id, devLeagueID, "sleeper", devLeagueLabel); err != nil {
-		return fmt.Errorf("bookmarking league: %w", err)
-	}
-
 	// Grade offline: the store-backed provider reads our seeded matchups + cached league, so the
 	// real grader writes week_results with no live Sleeper calls — and identical math to the
 	// runtime per-setter compare drill-down.
@@ -189,15 +240,38 @@ func run() error {
 	return nil
 }
 
+// resetSeedTables truncates every table this seeder populates so a reseed is idempotent and
+// deterministic. players (owned by seed-players) and week_locks (owned by the migration) are
+// deliberately excluded. No FKs exist between these, so a single TRUNCATE is sufficient.
+func resetSeedTables(ctx context.Context, pool *pgxpool.Pool) error {
+	const stmt = `TRUNCATE users, lineups, league_bookmarks, week_matchups, week_results, leagues`
+	if _, err := pool.Exec(ctx, stmt); err != nil {
+		return fmt.Errorf("resetting seed tables: %w", err)
+	}
+	return nil
+}
+
 // seedUsers upserts the fixed dev accounts with their stable UUIDs (dev_user's id is the one
 // /dev/login mints). Raw SQL because we need explicit ids, not generated ones.
 func seedUsers(ctx context.Context, pool *pgxpool.Pool) error {
 	for _, u := range devUsers {
+		provider := u.provider
+		if provider == "" {
+			provider = "dev"
+		}
+		oauthID := u.oauthID
+		if oauthID == "" {
+			oauthID = "dev-" + u.username
+		}
+		email := u.email
+		if email == "" {
+			email = u.username + "@dev.local"
+		}
 		_, err := pool.Exec(ctx,
 			`INSERT INTO users (id, oauth_provider, oauth_id, email, username)
-			 VALUES ($1, 'dev', $2, $3, $4)
+			 VALUES ($1, $2, $3, $4, $5)
 			 ON CONFLICT (oauth_provider, oauth_id) DO UPDATE SET username = EXCLUDED.username`,
-			u.id, "dev-"+u.username, u.username+"@dev.local", u.username)
+			u.id, provider, oauthID, email, u.username)
 		if err != nil {
 			return fmt.Errorf("seeding user %s: %w", u.username, err)
 		}
