@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Roster } from "../types";
 import { Icon, type IconName } from "./icons";
+import TeamAvatar from "./TeamAvatar";
 
 interface Props {
 	rosters: Roster[];
@@ -69,6 +70,7 @@ export default function TeamSelect({
 										setOpen(false);
 									}}
 								>
+									<TeamAvatar name={teamName(roster)} avatarUrl={roster.owner_avatar_url} />
 									<span className="pname">{teamName(roster)}</span>
 								</button>
 							))}

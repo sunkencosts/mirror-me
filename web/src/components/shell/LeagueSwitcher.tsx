@@ -4,8 +4,21 @@ import { Link } from "react-router";
 import { bookmarksKey, fetchJson } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import type { LeagueBookmark } from "../../types";
-import { onImageError } from "../../utils/playerImage";
 import { Icon } from "../icons";
+
+/** League avatar in the switcher; falls back to the ⛳ badge when missing or on load error. */
+function LeagueIcon({ iconUrl }: { iconUrl?: string }) {
+	const [failed, setFailed] = useState(false);
+	return (
+		<div className="lg-av">
+			{iconUrl && !failed ? (
+				<img src={iconUrl} alt="" onError={() => setFailed(true)} />
+			) : (
+				"⛳"
+			)}
+		</div>
+	);
+}
 
 interface LeagueSwitcherProps {
 	leagueId: string | null;
@@ -29,6 +42,8 @@ export default function LeagueSwitcher({
 		enabled: !!userId,
 	});
 
+	const selected = bookmarks.find((b) => b.league_id === leagueId);
+
 	function close() {
 		setOpen(false);
 	}
@@ -46,7 +61,7 @@ export default function LeagueSwitcher({
 				onClick={() => setOpen((o) => !o)}
 				aria-expanded={open}
 			>
-				<div className="lg-av">⛳</div>
+				<LeagueIcon iconUrl={selected?.icon_url} />
 				<div className="lg-name">
 					{leagueId ? leagueName || "League" : "Connect a league"}
 					<div className="lg-sub">
@@ -66,9 +81,7 @@ export default function LeagueSwitcher({
 									className={`pop-item${b.league_id === leagueId ? " active" : ""}`}
 									onClick={handleNavigate}
 								>
-									<div className="lg-av">
-										{b.icon_url ? <img src={b.icon_url} alt="" onError={onImageError} /> : "⛳"}
-									</div>
+									<LeagueIcon iconUrl={b.icon_url} />
 									<div style={{ flex: 1, minWidth: 0 }}>
 										<div className="pname">{b.label || b.league_id}</div>
 										<div className="pmeta">Open lineups</div>

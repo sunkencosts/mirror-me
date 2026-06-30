@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { League } from "../types";
 import { pprLabel } from "../utils/league";
 import WeekSelector from "./WeekSelector";
@@ -11,6 +12,7 @@ interface Props {
 export default function LeagueSummary({
 	league: {
 		name,
+		avatar_url,
 		roster_positions,
 		scoring_settings,
 		settings: { num_teams },
@@ -21,10 +23,17 @@ export default function LeagueSummary({
 	const ppr = pprLabel(scoring_settings.rec);
 	const tep = scoring_settings.bonus_rec_te > 0;
 	const superflex = roster_positions.includes("SUPER_FLEX");
+	const [avatarFailed, setAvatarFailed] = useState(false);
 
 	return (
 		<div className="league-hero">
-			<div className="lg-badge">⛳</div>
+			<div className="lg-badge">
+				{avatar_url && !avatarFailed ? (
+					<img src={avatar_url} alt="" onError={() => setAvatarFailed(true)} />
+				) : (
+					"⛳"
+				)}
+			</div>
 			<div>
 				<h2>{name}</h2>
 				<div className="meta">

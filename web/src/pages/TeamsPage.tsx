@@ -2,9 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router";
 import { fetchJson } from "../api";
 import { Icon } from "../components/icons";
+import TeamAvatar from "../components/TeamAvatar";
 import { computePowerScore, getTierRelative, type Tier } from "../scoring";
 import type { Roster } from "../types";
-import { avatarBg, initials } from "../utils/avatar";
 
 const TIER_RING: Record<Tier, string> = {
 	S: "r-myt",
@@ -52,12 +52,12 @@ export default function TeamsPage() {
 								style={{ padding: 12, gap: 8 }}
 							>
 								<div className="top">
-									<div
-										className={`pav ${TIER_RING[tier]}`}
-										style={{ background: avatarBg(name), width: 32, height: 32, fontSize: 12 }}
-									>
-										{initials(name)}
-									</div>
+									<TeamAvatar
+										name={name}
+										avatarUrl={roster.owner_avatar_url}
+										ring={TIER_RING[tier]}
+										size={32}
+									/>
 									<div style={{ flex: 1, minWidth: 0 }}>
 										<div
 											className="nm"

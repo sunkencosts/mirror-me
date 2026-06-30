@@ -75,7 +75,11 @@ func HandleListUserLeagues(store userLeagueStore) http.Handler {
 			return
 		}
 		for i := range leagues {
-			leagues[i].IconURL = iconForSource(leagues[i].Source)
+			// ListUserLeagues fills IconURL with the cached league avatar when known; fall back
+			// to the generic per-source icon for leagues not yet cached (or with no avatar set).
+			if leagues[i].IconURL == "" {
+				leagues[i].IconURL = iconForSource(leagues[i].Source)
+			}
 		}
 
 		_ = encode(w, r, http.StatusOK, leagues)

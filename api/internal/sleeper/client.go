@@ -12,7 +12,29 @@ import (
 	"github.com/sunkencosts/mirrorleague/internal/provider"
 )
 
-const IconURL = "https://sleepercdn.com/images/sleeperbot_icon_sm.png"
+const cdnBaseURL = "https://sleepercdn.com"
+
+const IconURL = cdnBaseURL + "/images/sleeperbot_icon_sm.png"
+
+// resolveOwnerAvatarURL applies Sleeper's avatar precedence: a custom per-league
+// upload (already a full URL) wins; otherwise build a thumbnail URL from the
+// default avatar hash. Returns "" when neither is set.
+func resolveOwnerAvatarURL(customUploadURL, avatarHash string) string {
+	if customUploadURL != "" {
+		return customUploadURL // verbatim — the extension is unreliable, don't touch it
+	}
+	if avatarHash != "" {
+		return cdnBaseURL + "/avatars/thumbs/" + avatarHash
+	}
+	return ""
+}
+
+// resolveLeagueAvatarURL builds a thumbnail URL from a league avatar hash.
+// Leagues have no custom-upload layer, so this is the no-custom-upload case of
+// resolveOwnerAvatarURL. Returns "" when unset.
+func resolveLeagueAvatarURL(avatarHash string) string {
+	return resolveOwnerAvatarURL("", avatarHash)
+}
 
 const (
 	rosterCacheTTL            = 5 * time.Minute
@@ -31,10 +53,12 @@ type roster struct {
 
 type leagueUserMetadata struct {
 	TeamName string `json:"team_name"`
+	Avatar   string `json:"avatar"` // custom per-league upload; ALREADY a full URL
 }
 
 type leagueUser struct {
 	UserID   string             `json:"user_id"`
+	Avatar   string             `json:"avatar"` // default Sleeper avatar hash
 	Metadata leagueUserMetadata `json:"metadata"`
 }
 
@@ -98,7 +122,7 @@ func (c *Client) resolvePlayers(playerMap map[string]provider.Player, ids []stri
 	players := []provider.Player{}
 	for _, id := range ids {
 		if player, ok := playerMap[id]; ok {
-			player.ImageURL = fmt.Sprintf("https://sleepercdn.com/content/nfl/players/thumb/%s.jpg", player.PlayerID)
+			player.ImageURL = fmt.Sprintf("%s/content/nfl/players/thumb/%s.jpg", cdnBaseURL, player.PlayerID)
 			players = append(players, player)
 		}
 	}
@@ -169,6 +193,7 @@ func (c *Client) GetLeague(ctx context.Context, leagueID string) (provider.Leagu
 	if leagueSettings == nil || leagueSettings.LeagueID == "" {
 		return provider.League{}, provider.ErrLeagueNotFound
 	}
+	leagueSettings.AvatarURL = resolveLeagueAvatarURL(leagueSettings.Avatar)
 	return *leagueSettings, nil
 }
 
@@ -243,18 +268,20 @@ func (c *Client) fetchRosters(ctx context.Context, leagueID string) ([]provider.
 
 	var result []provider.Roster
 	for _, r := range rawRosters {
-		teamName := ""
+		teamName, ownerAvatarURL := "", ""
 		if u, ok := usersByID[r.OwnerID]; ok {
 			teamName = u.Metadata.TeamName
+			ownerAvatarURL = resolveOwnerAvatarURL(u.Metadata.Avatar, u.Avatar)
 		}
 		result = append(result, provider.Roster{
-			RosterID: r.RosterID,
-			OwnerID:  r.OwnerID,
-			TeamName: teamName,
-			Players:  c.resolvePlayers(playerMap, r.Players),
-			Starters: c.resolvePlayers(playerMap, r.Starters),
-			Reserve:  c.resolvePlayers(playerMap, r.Reserve),
-			Taxi:     c.resolvePlayers(playerMap, r.Taxi),
+			RosterID:       r.RosterID,
+			OwnerID:        r.OwnerID,
+			TeamName:       teamName,
+			OwnerAvatarURL: ownerAvatarURL,
+			Players:        c.resolvePlayers(playerMap, r.Players),
+			Starters:       c.resolvePlayers(playerMap, r.Starters),
+			Reserve:        c.resolvePlayers(playerMap, r.Reserve),
+			Taxi:           c.resolvePlayers(playerMap, r.Taxi),
 		})
 	}
 
@@ -327,9 +354,11 @@ func (c *Client) fetchWeekMatchups(ctx context.Context, leagueID string, week in
 
 	ownerByRosterID := make(map[int]string, len(rosters))
 	teamNameByRosterID := make(map[int]string, len(rosters))
+	avatarByRosterID := make(map[int]string, len(rosters))
 	for _, r := range rosters {
 		ownerByRosterID[r.RosterID] = r.OwnerID
 		teamNameByRosterID[r.RosterID] = r.TeamName
+		avatarByRosterID[r.RosterID] = r.OwnerAvatarURL
 	}
 
 	var playerSlices [][]string
@@ -346,15 +375,16 @@ func (c *Client) fetchWeekMatchups(ctx context.Context, leagueID string, week in
 	var result []provider.WeekMatchup
 	for _, m := range rawMatchups {
 		result = append(result, provider.WeekMatchup{
-			RosterID:     m.RosterID,
-			MatchupID:    m.MatchupID,
-			OwnerID:      ownerByRosterID[m.RosterID],
-			TeamName:     teamNameByRosterID[m.RosterID],
-			Points:       m.Points,
-			CustomPoints: m.CustomPoints,
-			Players:      c.resolvePlayers(playerMap, m.Players),
-			Starters:     c.resolvePlayers(playerMap, m.Starters),
-			PlayerPoints: m.PlayersPoints,
+			RosterID:       m.RosterID,
+			MatchupID:      m.MatchupID,
+			OwnerID:        ownerByRosterID[m.RosterID],
+			TeamName:       teamNameByRosterID[m.RosterID],
+			OwnerAvatarURL: avatarByRosterID[m.RosterID],
+			Points:         m.Points,
+			CustomPoints:   m.CustomPoints,
+			Players:        c.resolvePlayers(playerMap, m.Players),
+			Starters:       c.resolvePlayers(playerMap, m.Starters),
+			PlayerPoints:   m.PlayersPoints,
 		})
 	}
 

@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -463,51 +464,42 @@ func (s *Store) SaveWeekMatchups(ctx context.Context, leagueID string, week int,
 	return nil
 }
 
-// GetCachedLeague returns the persisted shape of a league (its roster_positions, name,
-// season, current leg, team count). ok is false when the league isn't cached. Only the fields
-// the app actually consumes downstream (positions for scoring, season, leg for the
-// current-week display, num_teams for the My Leagues card) are reconstructed; the rest of
-// provider.League stays zero.
+// GetCachedLeague returns the full cached provider.League, decoded from the jsonb blob.
+// ok is false when the league isn't cached, or when the row predates the jsonb column
+// (NULL data) — in which case it's treated as a miss so the caller refetches live.
 func (s *Store) GetCachedLeague(ctx context.Context, leagueID string) (provider.League, bool, error) {
-	var (
-		name, season    string
-		leg             int
-		numTeams        int
-		rosterPositions []string
-	)
-	err := s.pool.QueryRow(ctx, `
-		SELECT name, season, leg, num_teams, roster_positions
-		FROM leagues
-		WHERE league_id = $1`, leagueID).Scan(&name, &season, &leg, &numTeams, &rosterPositions)
+	var data []byte
+	err := s.pool.QueryRow(ctx, `SELECT data FROM leagues WHERE league_id = $1`, leagueID).Scan(&data)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return provider.League{}, false, nil
 	}
 	if err != nil {
 		return provider.League{}, false, fmt.Errorf("reading cached league: %w", err)
 	}
-	league := provider.League{
-		Name:            name,
-		Season:          season,
-		LeagueID:        leagueID,
-		RosterPositions: rosterPositions,
+	if len(data) == 0 {
+		// Row predates the jsonb cache (NULL data); treat as a miss so it refetches live.
+		return provider.League{}, false, nil
 	}
-	league.Settings.Leg = leg
-	league.Settings.NumTeams = numTeams
+	var league provider.League
+	if err := json.Unmarshal(data, &league); err != nil {
+		return provider.League{}, false, fmt.Errorf("unmarshaling cached league %s: %w", leagueID, err)
+	}
 	return league, true, nil
 }
 
-// SaveLeague upserts a league's cached shape. Best-effort write-through so later reads
-// (grading, the per-setter compare) skip Sleeper's /league endpoint.
+// SaveLeague upserts a league's full cached shape as a jsonb blob. Best-effort write-through so
+// later reads (grading, the per-setter compare, the bookmark list) skip Sleeper's /league
+// endpoint. Storing the whole provider.League means new Sleeper fields need no schema change.
 func (s *Store) SaveLeague(ctx context.Context, league provider.League) error {
-	_, err := s.pool.Exec(ctx, `
-		INSERT INTO leagues (league_id, name, season, leg, num_teams, roster_positions, fetched_at)
-		VALUES ($1, $2, $3, $4, $5, $6, now())
-		ON CONFLICT (league_id) DO UPDATE SET
-		  name = EXCLUDED.name, season = EXCLUDED.season, leg = EXCLUDED.leg,
-		  num_teams = EXCLUDED.num_teams, roster_positions = EXCLUDED.roster_positions,
-		  fetched_at = now()`,
-		league.LeagueID, league.Name, league.Season, league.Settings.Leg,
-		league.Settings.NumTeams, league.RosterPositions)
+	data, err := json.Marshal(league)
+	if err != nil {
+		return fmt.Errorf("marshaling league %s: %w", league.LeagueID, err)
+	}
+	_, err = s.pool.Exec(ctx, `
+		INSERT INTO leagues (league_id, data, fetched_at)
+		VALUES ($1, $2, now())
+		ON CONFLICT (league_id) DO UPDATE SET data = EXCLUDED.data, fetched_at = now()`,
+		league.LeagueID, data)
 	if err != nil {
 		return fmt.Errorf("saving league %s: %w", league.LeagueID, err)
 	}
@@ -562,11 +554,16 @@ func (s *Store) SaveUserLeague(ctx context.Context, userID, leagueID, source, la
 }
 
 func (s *Store) ListUserLeagues(ctx context.Context, userID string) ([]provider.UserLeague, error) {
+	// LEFT JOIN the cached league so we can serve the real league avatar (when known) as the
+	// bookmark icon. IconURL stays empty for leagues not yet in the cache; the handler then
+	// falls back to the generic per-source icon.
 	rows, err := s.pool.Query(ctx, `
-		SELECT user_id, league_id, label, source, created_at, updated_at
-		FROM league_bookmarks
-		WHERE user_id = $1
-		ORDER BY created_at DESC
+		SELECT b.user_id, b.league_id, b.label, b.source, b.created_at, b.updated_at,
+		       COALESCE(l.data->>'avatar_url', '')
+		FROM league_bookmarks b
+		LEFT JOIN leagues l ON l.league_id = b.league_id
+		WHERE b.user_id = $1
+		ORDER BY b.created_at DESC
 	`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("listing user leagues: %w", err)
@@ -575,8 +572,9 @@ func (s *Store) ListUserLeagues(ctx context.Context, userID string) ([]provider.
 
 	leagues := []provider.UserLeague{}
 	for rows.Next() {
-		ul, err := scanUserLeague(rows)
-		if err != nil {
+		var ul provider.UserLeague
+		if err := rows.Scan(&ul.UserID, &ul.LeagueID, &ul.Label, &ul.Source,
+			&ul.CreatedAt, &ul.UpdatedAt, &ul.IconURL); err != nil {
 			return nil, fmt.Errorf("scanning user league: %w", err)
 		}
 		leagues = append(leagues, ul)

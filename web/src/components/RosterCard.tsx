@@ -6,6 +6,7 @@ import { EyeIcon, EyeSlashIcon, Icon } from "./icons";
 import PlayerCard from "./PlayerCard";
 import PlayerPickerItem from "./PlayerPickerItem";
 import RosterRarity from "./RosterRarity";
+import TeamAvatar from "./TeamAvatar";
 
 interface Props {
 	roster: Roster;
@@ -216,6 +217,12 @@ export default function RosterCard({
 	return (
 		<div className={`team${isDismissed ? " dismissed" : ""}`}>
 			<div className="team-head">
+				<TeamAvatar
+					name={roster.team_name || `Team ${roster.roster_id}`}
+					avatarUrl={roster.owner_avatar_url}
+					size={30}
+				/>
+				<h3>{roster.team_name || `Team ${roster.roster_id}`}</h3>
 				<button
 					type="button"
 					className="eye"
@@ -224,7 +231,6 @@ export default function RosterCard({
 				>
 					{isDismissed ? <EyeSlashIcon /> : <EyeIcon />}
 				</button>
-				<h3>{roster.team_name || `Team ${roster.roster_id}`}</h3>
 			</div>
 
 			{!isDismissed && (

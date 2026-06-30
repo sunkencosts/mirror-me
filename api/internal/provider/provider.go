@@ -80,6 +80,7 @@ type League struct {
 		DailyWaiversLastRan      int `json:"daily_waivers_last_ran"`
 	} `json:"settings"`
 	Avatar          string      `json:"avatar"`
+	AvatarURL       string      `json:"avatar_url"`
 	CompanyID       interface{} `json:"company_id"`
 	LastMessageID   string      `json:"last_message_id"`
 	Shard           int         `json:"shard"`
@@ -192,24 +193,26 @@ type SlimPlayer struct {
 }
 
 type Roster struct {
-	RosterID int      `json:"roster_id"`
-	OwnerID  string   `json:"owner_id"`
-	TeamName string   `json:"team_name"`
-	Players  []Player `json:"players"`
-	Starters []Player `json:"starters"`
-	Reserve  []Player `json:"reserve"`
-	Taxi     []Player `json:"taxi"`
+	RosterID       int      `json:"roster_id"`
+	OwnerID        string   `json:"owner_id"`
+	TeamName       string   `json:"team_name"`
+	OwnerAvatarURL string   `json:"owner_avatar_url"`
+	Players        []Player `json:"players"`
+	Starters       []Player `json:"starters"`
+	Reserve        []Player `json:"reserve"`
+	Taxi           []Player `json:"taxi"`
 }
 type WeekMatchup struct {
-	RosterID     int                `json:"roster_id"`
-	MatchupID    int                `json:"matchup_id"`
-	OwnerID      string             `json:"owner_id"`
-	TeamName     string             `json:"team_name"`
-	Points       float64            `json:"points"`
-	CustomPoints *float64           `json:"custom_points"`
-	Players      []Player           `json:"players"`
-	Starters     []Player           `json:"starters"`
-	PlayerPoints map[string]float64 `json:"player_points"`
+	RosterID       int                `json:"roster_id"`
+	MatchupID      int                `json:"matchup_id"`
+	OwnerID        string             `json:"owner_id"`
+	TeamName       string             `json:"team_name"`
+	OwnerAvatarURL string             `json:"owner_avatar_url"`
+	Points         float64            `json:"points"`
+	CustomPoints   *float64           `json:"custom_points"`
+	Players        []Player           `json:"players"`
+	Starters       []Player           `json:"starters"`
+	PlayerPoints   map[string]float64 `json:"player_points"`
 }
 
 // OfficialTotal is the Sleeper-authoritative official total: custom_points when present,

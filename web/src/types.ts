@@ -20,6 +20,7 @@ export interface Roster {
 	roster_id: number;
 	owner_id: string;
 	team_name: string;
+	owner_avatar_url: string;
 	players: Player[];
 	starters: Player[];
 	reserve: Player[];
@@ -29,6 +30,7 @@ export interface Roster {
 export interface League {
 	roster_positions: string[];
 	name: string;
+	avatar_url: string;
 	scoring_settings: {
 		bonus_rec_te: number;
 		rec: number;
@@ -61,6 +63,7 @@ export interface WeekMatchup {
 	matchup_id: number;
 	owner_id: string;
 	team_name: string;
+	owner_avatar_url: string;
 	points: number;
 	custom_points: number | null;
 	players: Player[];
