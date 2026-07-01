@@ -1,0 +1,41 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: mirrorleague
+          POSTGRES_PASSWORD: mirrorleague
+          POSTGRES_DB: mirrorleague_test
+        # The test suite hardcodes localhost:5433 (see api/cmd/server/server_test.go),
+        # so map the container's 5432 to 5433 on the runner.
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
+
+      # TestMain applies migrations and seeds players itself; the fake Sleeper API
+      # is an httptest server, so no external network or secrets are required.
+      - name: Test
+        working-directory: api
+        run: go test ./...
