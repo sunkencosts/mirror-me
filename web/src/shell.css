@@ -640,7 +640,12 @@
 		bottom: 0;
 		width: 284px;
 		max-width: 86vw;
-		height: 100vh;
+		/* dvh (not vh) so the bottom edge stays above the mobile browser
+		   toolbar; scroll + safe-area keep the Sign-in chip reachable */
+		height: 100dvh;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
 		transform: translateX(-103%);
 		transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
 		z-index: 120;

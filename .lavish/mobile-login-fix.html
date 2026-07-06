@@ -1,0 +1,259 @@
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mobile drawer — Sign-in cut off</title>
+<style>
+  /* ---- real Mirror League tokens (index.css) ---- */
+  :root {
+    color-scheme: dark;
+    --bg:#090c09; --bg-grad-1:#0c120d; --card:#0e140f; --card-2:#121a14; --card-3:#16201a;
+    --border:#1f2a21; --border-2:#2b3a2d;
+    --text:#eef3ee; --dim:#9aa79b; --mute:#67746a; --faint:#46514a;
+    --accent:#2fd07f; --accent-2:#1f9d62; --accent-ink:#04130b;
+    --accent-soft:rgba(47,208,127,.12); --accent-line:rgba(47,208,127,.34);
+    --unc:#3bbf6a; --myt:#e9b53e; --lose:#ef5b50;
+    --display:"Archivo",system-ui,sans-serif; --sans:"Hanken Grotesk",system-ui,sans-serif;
+    --mono:"Space Mono",ui-monospace,monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: var(--sans); color: var(--text);
+    background:
+      radial-gradient(1100px 600px at 78% -10%, rgba(47,208,127,.06), transparent 60%),
+      radial-gradient(900px 500px at 0% 0%, rgba(47,208,127,.04), transparent 55%),
+      linear-gradient(180deg, var(--bg-grad-1), var(--bg) 42%);
+    min-height: 100vh; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 44px 22px 80px; }
+
+  /* header */
+  .eyebrow { font-size:12px; font-weight:700; letter-spacing:1.6px; text-transform:uppercase; color:var(--accent); }
+  h1 { font-family:var(--display); font-weight:800; letter-spacing:-.5px; font-size:30px; line-height:1.22; margin:10px 0 12px; padding-bottom:2px; }
+  .lede { color:var(--dim); font-size:15.5px; line-height:1.6; max-width:64ch; margin:0; }
+  .lede b { color:var(--text); }
+  .filemeta { margin-top:14px; font-family:var(--mono); font-size:12px; line-height:1.9; color:var(--mute); }
+  .filemeta code { color:var(--dim); background:var(--card-2); border:1px solid var(--border); padding:2px 7px; border-radius:6px; }
+
+  h2 { font-family:var(--display); font-weight:800; font-size:19px; letter-spacing:-.2px; margin:52px 0 6px; }
+  .h2sub { color:var(--mute); font-size:13.5px; margin:0 0 22px; }
+
+  /* comparison grid */
+  .compare { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }
+  @media (max-width:720px){ .compare { grid-template-columns:1fr; } }
+  .col { min-width:0; }
+  .col-head { display:flex; align-items:center; gap:9px; margin-bottom:14px; }
+  .pill { font-size:11px; font-weight:800; letter-spacing:.5px; text-transform:uppercase; padding:4px 10px; border-radius:20px; }
+  .pill.bad { color:var(--lose); background:rgba(239,91,80,.13); border:1px solid rgba(239,91,80,.32); }
+  .pill.good { color:var(--accent); background:var(--accent-soft); border:1px solid var(--accent-line); }
+  .col-head .desc { font-size:13px; color:var(--dim); }
+
+  /* ---------- phone frame (holds a real screenshot) ---------- */
+  .phone {
+    position:relative; width:300px; max-width:100%; aspect-ratio:380/470; margin:0 auto;
+    border-radius:32px; padding:10px;
+    background:linear-gradient(180deg,#1a231b,#0b0f0b);
+    box-shadow:0 30px 60px -24px #000, inset 0 0 0 1px #2b3a2d;
+  }
+  .screen {
+    position:relative; height:100%; border-radius:24px; overflow:hidden;
+    background:var(--bg);
+  }
+  .screen img { width:100%; height:100%; object-fit:cover; display:block; }
+  .stage { position:relative; }
+  .note {
+    margin-top:16px; font-size:12.5px; line-height:1.55; padding:11px 14px; border-radius:12px;
+    display:flex; gap:10px; align-items:flex-start;
+  }
+  .note.bad { background:rgba(239,91,80,.08); border:1px solid rgba(239,91,80,.24); color:#f0b7b2; }
+  .note.good { background:var(--accent-soft); border:1px solid var(--accent-line); color:#a9e9c8; }
+  .note b { color:var(--text); }
+  .note .dot { flex:0 0 auto; margin-top:2px; }
+
+  /* root cause cards */
+  .causes { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+  @media (max-width:720px){ .causes { grid-template-columns:1fr; } }
+  .cause { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:18px; }
+  .cause .n { width:26px; height:26px; border-radius:8px; display:grid; place-items:center; font-family:var(--mono); font-weight:700; font-size:13px; color:var(--lose); background:rgba(239,91,80,.12); border:1px solid rgba(239,91,80,.3); margin-bottom:12px; }
+  .cause h3 { font-family:var(--display); font-weight:700; font-size:14.5px; margin:0 0 7px; }
+  .cause p { margin:0; color:var(--dim); font-size:13px; line-height:1.55; }
+  .cause code { font-family:var(--mono); font-size:11.5px; color:var(--accent); background:var(--accent-soft); padding:1px 5px; border-radius:5px; }
+  .cause code.red { color:#f0a39c; background:rgba(239,91,80,.12); }
+
+  /* diff container */
+  #diff { border:1px solid var(--border); border-radius:14px; overflow:hidden; background:var(--card); }
+  #diff .lav-empty { padding:30px; color:var(--mute); font-family:var(--mono); font-size:12px; }
+
+  /* next steps */
+  .steps { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px; }
+  .steps li { display:flex; gap:12px; align-items:flex-start; background:var(--card); border:1px solid var(--border); border-radius:12px; padding:13px 16px; font-size:13.5px; color:var(--dim); }
+  .steps li b { color:var(--text); }
+  .steps .k { flex:0 0 auto; width:22px; height:22px; border-radius:50%; background:var(--accent-soft); border:1px solid var(--accent-line); color:var(--accent); display:grid; place-items:center; font-size:12px; font-weight:800; }
+  .foot { margin-top:34px; font-size:12.5px; color:var(--mute); line-height:1.6; }
+  .foot b { color:var(--dim); }
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">Mirror League · Mobile shell bug</div>
+  <h1>The “Sign in” button hides under the browser chrome</h1>
+  <p class="lede">
+    On mobile, the side nav is an off-canvas drawer whose <b>Sign in</b> chip is pinned to the
+    bottom with <code>margin-top:auto</code>. Because the drawer is sized with <b>100vh</b> and
+    doesn’t scroll, its bottom edge sits <b>underneath</b> the browser’s bottom toolbar — so the
+    one button a logged-out visitor needs is clipped and, on short screens, unreachable.
+  </p>
+  <div class="filemeta">
+    <code>web/src/shell.css</code> · <code>@media (max-width:760px) .side</code> · lines 636–650
+  </div>
+
+  <!-- ===================== BEFORE / AFTER ===================== -->
+  <h2>What the user sees</h2>
+  <p class="h2sub">Real Playwright captures of the running app — logged out, drawer open, at a short
+    380×470 viewport where the nav list (499px) exceeds the screen. Both show the state after a
+    wheel-scroll gesture.</p>
+
+  <div class="compare">
+    <!-- BROKEN -->
+    <div class="col">
+      <div class="col-head">
+        <span class="pill bad">Old · broken</span>
+        <span class="desc"><code style="font-family:var(--mono);font-size:11.5px;color:#f0a39c">overflow hidden</code></span>
+      </div>
+      <div class="stage">
+        <div class="phone"><div class="screen">
+          <img src="drawer-broken.png" alt="Mobile drawer with old CSS: the Sign-in chip is clipped at the bottom edge and the drawer won't scroll to it" />
+        </div></div>
+      </div>
+      <div class="note bad"><span class="dot">✕</span><span>
+        The gesture does <b>nothing</b> — the drawer can’t scroll, so <b>“Save your lineups”</b> stays
+        clipped at the bottom edge (chip bottom <b>485px</b> in a 470px viewport). Unreachable.</span></div>
+    </div>
+
+    <!-- FIXED -->
+    <div class="col">
+      <div class="col-head">
+        <span class="pill good">Fixed</span>
+        <span class="desc"><code style="font-family:var(--mono);font-size:11.5px;color:var(--accent)">100dvh + scroll + safe-area</code></span>
+      </div>
+      <div class="stage">
+        <div class="phone"><div class="screen">
+          <img src="drawer-fixed.png" alt="Mobile drawer with the fix: the drawer scrolled and the full Sign-in chip is visible in-frame" />
+        </div></div>
+      </div>
+      <div class="note good"><span class="dot">✓</span><span>
+        The drawer <b>scrolls</b> (the brand header slid up) and the whole <b>Sign in</b> chip lands
+        in-frame (bottom <b>456px</b> ≤ 470). Reachable.</span></div>
+    </div>
+  </div>
+
+  <!-- ===================== ROOT CAUSE ===================== -->
+  <h2>Why it happens — three compounding causes</h2>
+  <p class="h2sub">All three live in the one <code style="font-family:var(--mono);font-size:12px;color:var(--dim)">@media (max-width:760px) .side</code> block.</p>
+  <div class="causes">
+    <div class="cause">
+      <div class="n">1</div>
+      <h3>Static viewport unit</h3>
+      <p>The drawer uses <code class="red">height:100vh</code>. On mobile, <code class="red">vh</code>
+      is the <b>largest</b> viewport (toolbar collapsed), so the bottom overshoots the visible area
+      when the toolbar is shown. The <code>.app</code> wrapper already switched to <code>100dvh</code> — the drawer didn’t.</p>
+    </div>
+    <div class="cause">
+      <div class="n">2</div>
+      <h3>No scroll fallback</h3>
+      <p>The drawer is a flex column with <b>no</b> <code>overflow-y</code>. When Global + League
+      nav + switcher + chip exceed the screen, the bottom content is clipped with no way to reach it.</p>
+    </div>
+    <div class="cause">
+      <div class="n">3</div>
+      <h3>No safe-area inset</h3>
+      <p>Bottom padding is a flat <code class="red">14px</code>. On notched phones the home indicator
+      eats it, nudging the chip further out of reach. Needs <code>env(safe-area-inset-bottom)</code>.</p>
+    </div>
+  </div>
+
+  <!-- ===================== THE FIX ===================== -->
+  <h2>The fix — one rule, three edits</h2>
+  <p class="h2sub"><code style="font-family:var(--mono);font-size:12px;color:var(--dim)">web/src/shell.css</code> — the mobile <code style="font-family:var(--mono);font-size:12px;color:var(--dim)">.side</code> block. No JS, no markup change.</p>
+  <div id="diff"><div class="lav-empty">Loading diff…</div></div>
+
+  <!-- ===================== NEXT ===================== -->
+  <h2>Suggested next steps</h2>
+  <ol class="steps">
+    <li><span class="k">1</span><span>Apply the CSS diff to <b>web/src/shell.css</b> and rebuild — <b>Biome + tsc + vite build</b> is enough here (pure CSS).</span></li>
+    <li><span class="k">2</span><span>Verify on a real device or DevTools device toolbar with the URL bar <b>shown</b>, at a short height (e.g. iPhone SE), logged <b>out</b>.</span></li>
+    <li><span class="k">3</span><span>Optional: give <b>.bottom-tabs</b> the same <code style="font-family:var(--mono);font-size:11.5px;color:var(--accent)">dvh</code> audit — it already handles safe-area, but confirm it lines up with the shorter drawer.</span></li>
+  </ol>
+
+  <p class="foot">
+    <b>Captures:</b> real Playwright/Chromium screenshots of the running app at <code style="font-family:var(--mono)">localhost:5173</code>,
+    logged out, drawer open, 380×470 viewport. They verify the <b>overflow-scroll</b> half of the fix — the part that was broken —
+    by measuring the Sign-in chip’s position after a real wheel gesture (old: bottom 485px, unreachable; fixed: 456px, in-frame).
+    <b>Caveat:</b> headless Chromium has no dynamic browser toolbar and no notch, so <code style="font-family:var(--mono)">vh</code>/<code style="font-family:var(--mono)">dvh</code>
+    resolve identically here — the <code style="font-family:var(--mono)">100dvh</code> and <code style="font-family:var(--mono)">safe-area-inset</code>
+    parts remain reasoned from the CSS and are best confirmed on a real phone with the URL bar showing.
+  </p>
+</div>
+
+<!-- CSS diff via @pierre/diffs -->
+<script type="module">
+  import { FileDiff } from "https://esm.sh/@pierre/diffs@1.2.10?bundle";
+  const options = { theme: { light: "github-light", dark: "github-dark" }, themeType: "dark", overflow: "wrap" };
+  const oldFile = {
+    name: "web/src/shell.css",
+    contents: `@media (max-width: 760px) {
+\t/* sidebar becomes a left drawer */
+\t.side {
+\t\tposition: fixed;
+\t\ttop: 0;
+\t\tleft: 0;
+\t\tbottom: 0;
+\t\twidth: 284px;
+\t\tmax-width: 86vw;
+\t\theight: 100vh;
+\t\ttransform: translateX(-103%);
+\t\ttransition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
+\t\tz-index: 120;
+\t\tbox-shadow: 24px 0 60px -20px #000;
+\t\tbackground: linear-gradient(180deg, #11180f, #090c09);
+\t\tbackdrop-filter: none;
+\t}
+}
+`,
+  };
+  const newFile = {
+    name: "web/src/shell.css",
+    contents: `@media (max-width: 760px) {
+\t/* sidebar becomes a left drawer */
+\t.side {
+\t\tposition: fixed;
+\t\ttop: 0;
+\t\tleft: 0;
+\t\tbottom: 0;
+\t\twidth: 284px;
+\t\tmax-width: 86vw;
+\t\t/* dvh tracks the visible viewport; 100vh overshoots behind the
+\t\t   mobile browser toolbar and clips the pinned Sign-in chip */
+\t\theight: 100dvh;
+\t\t/* scroll when Global + League nav exceed a short screen so the
+\t\t   bottom chip is always reachable */
+\t\toverflow-y: auto;
+\t\toverscroll-behavior: contain;
+\t\t/* keep the chip clear of the iOS home indicator */
+\t\tpadding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+\t\ttransform: translateX(-103%);
+\t\ttransition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
+\t\tz-index: 120;
+\t\tbox-shadow: 24px 0 60px -20px #000;
+\t\tbackground: linear-gradient(180deg, #11180f, #090c09);
+\t\tbackdrop-filter: none;
+\t}
+}
+`,
+  };
+  try {
+    new FileDiff({ ...options, diffStyle: "unified" }).render({
+      containerWrapper: document.querySelector("#diff"),
+      oldFile, newFile,
+    });
+  } catch (e) {
+    document.querySelector("#diff").innerHTML =
+      '<div class="lav-empty">diff renderer offline — key change: <b>height:100vh → 100dvh</b>, add <b>overflow-y:auto</b>, <b>overscroll-behavior:contain</b>, and <b>padding-bottom: calc(14px + env(safe-area-inset-bottom))</b>.</div>';
+  }
+</script>
