@@ -27,6 +27,20 @@ func RequireAuth(jwtSecret []byte) func(http.Handler) http.Handler {
 	}
 }
 
+// OptionalAuth stashes the JWT claims in the request context when a valid token is
+// present, but — unlike RequireAuth — lets unauthenticated requests through untouched.
+// Public-but-auth-aware handlers read the user via ClaimsFromContext.
+func OptionalAuth(jwtSecret []byte) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if claims, ok := extractClaims(r, jwtSecret); ok {
+				r = r.WithContext(context.WithValue(r.Context(), claimsKey, claims))
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func RequireAdminSecret(secret string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

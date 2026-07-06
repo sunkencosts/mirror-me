@@ -55,3 +55,17 @@ export async function deleteJson(url: string): Promise<void> {
 export function bookmarksKey(userId: string): ["bookmarks", string] {
 	return ["bookmarks", userId];
 }
+
+export async function trackPageview(path: string, visitorId: string): Promise<void> {
+	try {
+		await fetch(apiUrl("/collect"), {
+			method: "POST",
+			credentials: "include",
+			keepalive: true,
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ path, referrer: document.referrer, visitor_id: visitorId }),
+		});
+	} catch {
+		// best-effort analytics — never surface to the user
+	}
+}

@@ -83,7 +83,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatalf("TestMain: connect test db: %v", err)
 	}
-	if _, err := pool.Exec(ctx, "TRUNCATE users, lineups, players, league_bookmarks, week_locks, week_results, week_matchups, leagues RESTART IDENTITY CASCADE"); err != nil {
+	if _, err := pool.Exec(ctx, "TRUNCATE users, lineups, players, league_bookmarks, week_locks, week_results, week_matchups, leagues, visits RESTART IDENTITY CASCADE"); err != nil {
 		log.Fatalf("TestMain: truncate: %v", err)
 	}
 	if err := db.NewStore(pool).UpsertPlayers(ctx, testPlayers); err != nil {
@@ -101,7 +101,7 @@ func newTestServer(t *testing.T, sleeperHandler http.Handler, extraEnv ...map[st
 	if err != nil {
 		t.Fatalf("newTestServer: connect db: %v", err)
 	}
-	if _, err := pool.Exec(context.Background(), "TRUNCATE users, lineups, players, league_bookmarks, week_locks, week_results, week_matchups, leagues"); err != nil {
+	if _, err := pool.Exec(context.Background(), "TRUNCATE users, lineups, players, league_bookmarks, week_locks, week_results, week_matchups, leagues, visits"); err != nil {
 		t.Fatalf("newTestServer: truncate: %v", err)
 	}
 	if err := db.NewStore(pool).UpsertPlayers(context.Background(), testPlayers); err != nil {

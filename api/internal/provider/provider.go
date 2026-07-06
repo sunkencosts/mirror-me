@@ -362,6 +362,19 @@ type UserLeague struct {
 	Source    string    `json:"source"`
 }
 
+// Visit is one first-party page-view event recorded by POST /collect. UserID is empty
+// for anonymous visitors (persisted as NULL so anon-vs-logged-in and the anon→sign-up
+// funnel are queryable). Referrer and Country are empty when unknown. See migration
+// 000007_visits.
+type Visit struct {
+	VisitorID string
+	UserID    string
+	Path      string
+	Referrer  string
+	Country   string
+	IsBot     bool
+}
+
 type Provider interface {
 	GetRosters(ctx context.Context, leagueID string) ([]Roster, error)
 	GetLeague(ctx context.Context, leagueID string) (League, error)

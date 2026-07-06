@@ -93,6 +93,13 @@ func run(ctx context.Context, getenv func(string) string, stdout, stderr io.Writ
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
 		return fmt.Errorf("running migrations: %w", err)
 	}
+	// Release the migrator's dedicated DB connection now that migrations are done —
+	// it is separate from dbpool and would otherwise leak for the process lifetime.
+	if srcErr, dbErr := m.Close(); srcErr != nil {
+		return fmt.Errorf("closing migration source: %w", srcErr)
+	} else if dbErr != nil {
+		return fmt.Errorf("closing migration db: %w", dbErr)
+	}
 
 	srv := NewServer(cachingSleeper, cfg, store, googleClient, logger, currentWeek)
 

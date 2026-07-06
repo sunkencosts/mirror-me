@@ -682,3 +682,25 @@ func (s *Store) MergeAnonymousData(ctx context.Context, anonymousID, userID stri
 
 	return tx.Commit(ctx)
 }
+
+// InsertVisit records one first-party page-view event. Empty UserID, Referrer, and
+// Country are stored as NULL so read-time queries can distinguish anonymous visits and
+// unknown fields from real values.
+func (s *Store) InsertVisit(ctx context.Context, v provider.Visit) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO visits (visitor_id, user_id, path, referrer, country, is_bot)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, v.VisitorID, nullIfEmpty(v.UserID), v.Path, nullIfEmpty(v.Referrer), nullIfEmpty(v.Country), v.IsBot)
+	if err != nil {
+		return fmt.Errorf("inserting visit: %w", err)
+	}
+	return nil
+}
+
+// nullIfEmpty maps "" to a SQL NULL and any other string to itself.
+func nullIfEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}

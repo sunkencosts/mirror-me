@@ -1,8 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Outlet, ScrollRestoration, useLocation } from "react-router";
-import { deleteJson } from "../api";
+import { deleteJson, trackPageview } from "../api";
 import { useAuth } from "../context/AuthContext";
+import { useUserId } from "../hooks/useUserId";
 import BottomTabs from "./shell/BottomTabs";
 import MobileAppBar from "./shell/MobileAppBar";
 import Sidebar from "./shell/Sidebar";
@@ -13,6 +14,13 @@ export default function Layout() {
 	const { user, isLoading } = useAuth();
 	const queryClient = useQueryClient();
 	const { pathname } = useLocation();
+	const visitorId = useUserId();
+
+	// Report one analytics page-view on each client-side route change, so the server can
+	// count real (incl. anonymous) humans across navigation that never hits the backend.
+	useEffect(() => {
+		void trackPageview(pathname, visitorId);
+	}, [pathname, visitorId]);
 
 	// Close the mobile drawer whenever the route changes (incl. back/forward).
 	// biome-ignore lint/correctness/useExhaustiveDependencies: pathname is the trigger

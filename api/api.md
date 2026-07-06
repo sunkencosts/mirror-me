@@ -353,6 +353,33 @@ Same shape, scoped to one league, with **no** minimum-weeks gate (ranked from we
 
 ---
 
+## Analytics
+
+### `POST /collect`
+Records one first-party page-view event, fired by the SPA on each route change. Public and
+unauthenticated — anonymous visitors are the point — but stamps `user_id` from the
+`auth_token` cookie/JWT when present, so one `visitor_id`'s history reveals the anon →
+sign-up funnel. Sets **no cookie**: `visitor_id` reuses the frontend's existing
+`localStorage` id and rides in the body. `country` is read from the `CF-IPCountry` header
+(no raw IP stored); requests from known bot user-agents are stored with `is_bot=true`.
+
+**Request body**
+```json
+{
+  "path": "/leagues",
+  "referrer": "https://google.com",
+  "visitor_id": "uuid"
+}
+```
+`path` and `visitor_id` are required; `referrer` is optional.
+
+**Response** `204 No Content`. `400` if `path` or `visitor_id` is missing.
+
+Rows land in the append-only `visits` table; there is no read endpoint yet — query the
+table directly (visitors/day, anon vs logged-in, top pages, anon→sign-up funnel).
+
+---
+
 ## Admin
 
 ### `POST /admin/sync-players`
