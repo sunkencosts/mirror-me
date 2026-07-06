@@ -4,3 +4,5 @@ api/.env
 players.json
 rankings.json
 tmp/
+# lavish design-review artifacts
+.lavish/
