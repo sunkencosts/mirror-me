@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { fetchJson } from "../api";
+import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
 import type { League, LeagueBookmark } from "../types";
 import { pprLabel } from "../utils/league";
 import { onImageError } from "../utils/playerImage";
-import { CheckIcon, TrashIcon, XIcon } from "./icons";
+import { CheckIcon, ShareIcon, TrashIcon, XIcon } from "./icons";
 
 interface Props {
 	bookmark: LeagueBookmark;
@@ -35,6 +36,7 @@ export default function LeagueBookmarkCard({
 	isDeleting,
 }: Props) {
 	const navigate = useNavigate();
+	const { copied, copy } = useCopyToClipboard();
 	const { data: league } = useQuery<League>({
 		queryKey: ["league", bookmark.league_id],
 		queryFn: () => fetchJson(`/league/${bookmark.league_id}`),
@@ -111,20 +113,42 @@ export default function LeagueBookmarkCard({
 							</button>
 						</>
 					) : (
-						<button
-							type="button"
-							className="icon-btn"
-							style={{ width: 30, height: 30 }}
-							onClick={(e) => {
-								e.stopPropagation();
-								onDelete();
-							}}
-							disabled={isDeleting}
-							aria-label="Delete bookmark"
-							title="Delete bookmark"
-						>
-							<TrashIcon />
-						</button>
+						<>
+							<span className="copied-anchor">
+								<button
+									type="button"
+									className="icon-btn"
+									style={{ width: 30, height: 30 }}
+									onClick={(e) => {
+										e.stopPropagation();
+										copy(`${window.location.origin}/add/${bookmark.league_id}`);
+									}}
+									aria-label={copied ? "Link copied!" : "Copy share link"}
+									title={copied ? "Link copied!" : "Copy share link"}
+								>
+									{copied ? <CheckIcon /> : <ShareIcon />}
+								</button>
+								{/* Persistent live region (toggled via opacity, not mount/unmount)
+								    so screen readers announce the text change on copy. */}
+								<span className={`copied-pill${copied ? " show" : ""}`} role="status">
+									{copied ? "Copied!" : ""}
+								</span>
+							</span>
+							<button
+								type="button"
+								className="icon-btn"
+								style={{ width: 30, height: 30 }}
+								onClick={(e) => {
+									e.stopPropagation();
+									onDelete();
+								}}
+								disabled={isDeleting}
+								aria-label="Delete bookmark"
+								title="Delete bookmark"
+							>
+								<TrashIcon />
+							</button>
+						</>
 					)}
 				</div>
 			</div>

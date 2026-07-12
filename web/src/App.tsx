@@ -3,6 +3,7 @@ import Layout from "./components/Layout";
 import LeagueError from "./components/LeagueError";
 import LegacyLeagueRedirect from "./components/LegacyLeagueRedirect";
 import RootError from "./components/RootError";
+import AddLeaguePage from "./pages/AddLeaguePage";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import LeagueStatsPage from "./pages/LeagueStatsPage";
 import LineupsPage from "./pages/LineupsPage";
@@ -18,6 +19,7 @@ export const router = createBrowserRouter([
 		children: [
 			// Global scope
 			{ index: true, element: <MyLeaguesPage /> },
+			{ path: "add/:leagueId", element: <AddLeaguePage /> },
 			{ path: "leaderboard", element: <LeaderboardPage /> },
 			{ path: "rankings/rookies", element: <RookieRankingsPage /> },
 

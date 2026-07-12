@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { Icon } from "../icons";
 
 export type ScoringMode = "standard" | "ppr";
@@ -29,29 +29,7 @@ const R2: Record<ScoringMode, R2Entry> = {
 
 export default function RankingsHero({ scoringMode, onScoringModeChange }: RankingsHeroProps) {
 	const r2 = R2[scoringMode];
-	const [copied, setCopied] = useState(false);
-
-	async function handleShare() {
-		const url = window.location.href;
-		try {
-			if (navigator.clipboard) {
-				await navigator.clipboard.writeText(url);
-			} else {
-				const input = document.createElement("textarea");
-				input.value = url;
-				input.style.position = "fixed";
-				input.style.opacity = "0";
-				document.body.append(input);
-				input.select();
-				document.execCommand("copy");
-				input.remove();
-			}
-			setCopied(true);
-			setTimeout(() => setCopied(false), 1500);
-		} catch {
-			// clipboard unavailable in this context — nothing more we can do
-		}
-	}
+	const { copied, copy } = useCopyToClipboard();
 
 	return (
 		<div className="home-hero rr-hero">
@@ -99,7 +77,7 @@ export default function RankingsHero({ scoringMode, onScoringModeChange }: Ranki
 					type="button"
 					className="btn btn-ghost btn-sm"
 					style={{ marginLeft: "auto" }}
-					onClick={handleShare}
+					onClick={() => copy(window.location.href)}
 				>
 					<Icon name="share" />
 					{copied ? "Copied!" : "Share"}

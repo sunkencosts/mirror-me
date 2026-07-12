@@ -567,7 +567,31 @@
 }
 .lg-card:hover {
 	border-color: var(--accent-line);
-	transform: translateY(-2px);
+}
+.copied-anchor {
+	position: relative;
+	display: inline-flex;
+}
+.copied-pill {
+	position: absolute;
+	bottom: calc(100% + 6px);
+	right: 0;
+	padding: 3px 8px;
+	border-radius: 6px;
+	background: var(--accent);
+	color: #fff;
+	font-size: 11px;
+	font-weight: 600;
+	white-space: nowrap;
+	pointer-events: none;
+	z-index: 2;
+	/* Kept in the DOM/a11y tree while empty (opacity, not display:none) so the
+	   role="status" live region announces when its text changes to "Copied!". */
+	opacity: 0;
+	transition: opacity 0.12s;
+}
+.copied-pill.show {
+	opacity: 1;
 }
 .lg-card .top {
 	display: flex;
