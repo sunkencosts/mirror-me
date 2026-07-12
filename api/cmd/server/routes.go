@@ -32,6 +32,7 @@ func addRoutes(mux *http.ServeMux, sleeperClient sleeperDeps, store *db.Store, c
 	mux.Handle("GET /auth/google", handlers.HandleGoogleLogin(googleClient))
 	mux.Handle("GET /auth/google/callback", handlers.HandleGoogleCallback(googleClient, store, jwtSecret, cfg.FrontendURL))
 	mux.Handle("GET /auth/me", requireAuth(handlers.HandleAuthMe()))
+	mux.Handle("PATCH /auth/profile", requireAuth(handlers.HandleUpdateProfile(store, jwtSecret, googleClient.IsSecure())))
 	mux.Handle("POST /auth/merge", requireAuth(handlers.HandleMerge(store)))
 	mux.Handle("DELETE /auth/logout", handlers.HandleLogout(googleClient.IsSecure()))
 	if cfg.AppEnv == "development" {

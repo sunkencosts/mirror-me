@@ -7,6 +7,8 @@ import (
 )
 
 var ErrUsernameConflict = errors.New("username already taken")
+var ErrInvalidUsername = errors.New("invalid username")
+var ErrInvalidDisplayName = errors.New("invalid display name")
 var ErrLeagueNotFound = errors.New("league not found")
 
 type User struct {
@@ -16,9 +18,10 @@ type User struct {
 }
 
 type AuthUser struct {
-	ID       string `json:"id"`
-	Email    string `json:"email"`
-	Username string `json:"username"`
+	ID          string `json:"id"`
+	Email       string `json:"email"`
+	Username    string `json:"username"`
+	DisplayName string `json:"display_name"`
 }
 
 type League struct {
