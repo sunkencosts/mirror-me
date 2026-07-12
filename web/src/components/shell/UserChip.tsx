@@ -1,6 +1,8 @@
+import { useState } from "react";
 import type { AuthUser } from "../../types";
 import { avatarBg, initials } from "../../utils/avatar";
 import { Icon } from "../icons";
+import AccountMenu from "./AccountMenu";
 
 interface UserChipProps {
 	user: AuthUser | null;
@@ -9,6 +11,8 @@ interface UserChipProps {
 }
 
 export default function UserChip({ user, isLoading, onLogout }: UserChipProps) {
+	const [open, setOpen] = useState(false);
+
 	if (isLoading) {
 		return (
 			<div className="user-chip" aria-hidden="true">
@@ -41,20 +45,34 @@ export default function UserChip({ user, isLoading, onLogout }: UserChipProps) {
 		);
 	}
 	return (
-		<div className="user-chip">
-			<div
-				className="av pav r-myt"
-				style={{ background: avatarBg(user.username), width: 28, height: 28, fontSize: 11 }}
+		<div className="account-anchor account-anchor--chip">
+			<button
+				type="button"
+				className="user-chip user-chip-btn"
+				onClick={() => setOpen((o) => !o)}
+				aria-expanded={open}
+				aria-haspopup="menu"
 			>
-				{initials(user.username)}
-			</div>
-			<div style={{ flex: 1, minWidth: 0 }}>
-				<div className="u-name">{user.username}</div>
-				<div className="u-sub">{user.email}</div>
-			</div>
-			<button type="button" className="out" title="Log out" onClick={onLogout} aria-label="Log out">
-				<Icon name="logout" />
+				<div
+					className="av pav r-myt"
+					style={{ background: avatarBg(user.display_name), width: 28, height: 28, fontSize: 11 }}
+				>
+					{initials(user.display_name)}
+				</div>
+				<div style={{ flex: 1, minWidth: 0 }}>
+					<div className="u-name">{user.display_name}</div>
+					<div className="u-sub">@{user.username}</div>
+				</div>
+				<Icon name="chevDown" className="chev" />
 			</button>
+			{open && (
+				<AccountMenu
+					user={user}
+					onLogout={onLogout}
+					onClose={() => setOpen(false)}
+					variant="sidebar"
+				/>
+			)}
 		</div>
 	);
 }

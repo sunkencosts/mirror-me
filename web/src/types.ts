@@ -85,6 +85,7 @@ export interface AuthUser {
 	id: string;
 	email: string;
 	username: string;
+	display_name: string;
 }
 
 export interface SlimPlayer {
