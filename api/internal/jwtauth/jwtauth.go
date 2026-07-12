@@ -8,15 +8,17 @@ import (
 )
 
 type Claims struct {
-	Email    string `json:"email"`
-	Username string `json:"username"`
+	Email       string `json:"email"`
+	Username    string `json:"username"`
+	DisplayName string `json:"display_name"`
 	jwt.RegisteredClaims
 }
 
-func Sign(secret []byte, userID, email, username string) (string, error) {
+func Sign(secret []byte, userID, email, username, displayName string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
-		Email:    email,
-		Username: username,
+		Email:       email,
+		Username:    username,
+		DisplayName: displayName,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(30 * 24 * time.Hour)),

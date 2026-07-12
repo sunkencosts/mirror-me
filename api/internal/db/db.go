@@ -612,27 +612,54 @@ func (s *Store) DeleteUserLeague(ctx context.Context, userID, leagueID, source s
 
 func scanAuthUser(row scanner) (provider.AuthUser, error) {
 	var user provider.AuthUser
-	err := row.Scan(&user.ID, &user.Email, &user.Username)
+	err := row.Scan(&user.ID, &user.Email, &user.Username, &user.DisplayName)
 	return user, err
 }
 
-func (s *Store) CreateOrGetOAuthUser(ctx context.Context, oauthProvider, providerID, email, username string) (provider.AuthUser, error) {
+func (s *Store) CreateOrGetOAuthUser(ctx context.Context, oauthProvider, providerID, email, username, displayName string) (provider.AuthUser, error) {
 	row := s.pool.QueryRow(ctx, `
-		INSERT INTO users (oauth_provider, oauth_id, email, username)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO users (oauth_provider, oauth_id, email, username, display_name)
+		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (oauth_provider, oauth_id) DO UPDATE
 			SET email = EXCLUDED.email
-		RETURNING id, email, username
-	`, oauthProvider, providerID, email, username)
+		RETURNING id, email, username, display_name
+	`, oauthProvider, providerID, email, username, displayName)
 	u, err := scanAuthUser(row)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "users_username_key" {
+		if isUsernameConflict(err) {
 			return provider.AuthUser{}, provider.ErrUsernameConflict
 		}
 		return provider.AuthUser{}, fmt.Errorf("creating or getting oauth user %s/%s: %w", oauthProvider, providerID, err)
 	}
 	return u, nil
+}
+
+// UpdateProfile sets the username (unique) and display name (free-form) for a user, returning the
+// updated record. Callers are expected to have validated/normalized both fields first.
+func (s *Store) UpdateProfile(ctx context.Context, userID, username, displayName string) (provider.AuthUser, error) {
+	row := s.pool.QueryRow(ctx, `
+		UPDATE users SET username = $2, display_name = $3
+		WHERE id = $1
+		RETURNING id, email, username, display_name
+	`, userID, username, displayName)
+	u, err := scanAuthUser(row)
+	if err != nil {
+		if isUsernameConflict(err) {
+			return provider.AuthUser{}, provider.ErrUsernameConflict
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			return provider.AuthUser{}, fmt.Errorf("updating profile: user %s: %w", userID, err)
+		}
+		return provider.AuthUser{}, fmt.Errorf("updating profile for user %s: %w", userID, err)
+	}
+	return u, nil
+}
+
+// isUsernameConflict reports whether err is a Postgres unique violation on the case-insensitive
+// username index (users_username_lower_key).
+func isUsernameConflict(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "users_username_lower_key"
 }
 
 func (s *Store) MergeAnonymousData(ctx context.Context, anonymousID, userID string) error {

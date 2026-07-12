@@ -268,8 +268,8 @@ func seedUsers(ctx context.Context, pool *pgxpool.Pool) error {
 			email = u.username + "@dev.local"
 		}
 		_, err := pool.Exec(ctx,
-			`INSERT INTO users (id, oauth_provider, oauth_id, email, username)
-			 VALUES ($1, $2, $3, $4, $5)
+			`INSERT INTO users (id, oauth_provider, oauth_id, email, username, display_name)
+			 VALUES ($1, $2, $3, $4, $5, $5)
 			 ON CONFLICT (oauth_provider, oauth_id) DO UPDATE SET username = EXCLUDED.username`,
 			u.id, provider, oauthID, email, u.username)
 		if err != nil {

@@ -25,7 +25,8 @@ func HandleDevLogin(jwtSecret []byte, frontendURL, defaultUserID, defaultEmail, 
 			username = defaultUsername
 		}
 
-		signed, err := jwtauth.Sign(jwtSecret, userID, email, username)
+		// Dev identity has no separate display name; mirror the seed default (display_name = username).
+		signed, err := jwtauth.Sign(jwtSecret, userID, email, username, username)
 		if err != nil {
 			http.Error(w, "failed to sign token", http.StatusInternalServerError)
 			return

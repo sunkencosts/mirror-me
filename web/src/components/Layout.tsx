@@ -54,7 +54,12 @@ export default function Layout() {
 					onNavigate={closeDrawer}
 				/>
 				<div className="main">
-					<MobileAppBar user={user} isLoading={isLoading} onOpenDrawer={openDrawer} />
+					<MobileAppBar
+						user={user}
+						isLoading={isLoading}
+						onOpenDrawer={openDrawer}
+						onLogout={handleLogout}
+					/>
 					<Topbar />
 					<main className="content">
 						<Outlet />

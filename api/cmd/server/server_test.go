@@ -189,7 +189,7 @@ func newTestServer(t *testing.T, sleeperHandler http.Handler, extraEnv ...map[st
 
 // signTestJWT creates a valid HS256 JWT signed with testJWTSecret.
 func signTestJWT(userID, email, username string) string {
-	token, err := jwtauth.Sign([]byte(testJWTSecret), userID, email, username)
+	token, err := jwtauth.Sign([]byte(testJWTSecret), userID, email, username, username)
 	if err != nil {
 		panic(fmt.Sprintf("signTestJWT: %v", err))
 	}
@@ -396,6 +396,187 @@ func TestAuthMe_Valid(t *testing.T) {
 	}
 	if user.Username != "cool_bear" {
 		t.Errorf("expected username %q, got %q", "cool_bear", user.Username)
+	}
+}
+
+// authTokenFromResponse returns the value of the auth_token cookie set on a response, or "".
+func authTokenFromResponse(resp *http.Response) string {
+	for _, c := range resp.Cookies() {
+		if c.Name == "auth_token" {
+			return c.Value
+		}
+	}
+	return ""
+}
+
+func TestUpdateProfile_Success(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+	token := doGoogleLogin(t, baseURL, "profile-success")
+
+	body := `{"username":"new_handle","display_name":"New Name"}`
+	resp, err := http.DefaultClient.Do(authedJSONRequest(http.MethodPatch, baseURL+"/auth/profile", token, body))
+	if err != nil {
+		t.Fatalf("profile request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var user provider.AuthUser
+	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+		t.Fatalf("decode profile response: %v", err)
+	}
+	if user.Username != "new_handle" {
+		t.Errorf("expected username %q, got %q", "new_handle", user.Username)
+	}
+	if user.DisplayName != "New Name" {
+		t.Errorf("expected display_name %q, got %q", "New Name", user.DisplayName)
+	}
+
+	// The re-issued cookie carries the new identity; /auth/me must reflect it.
+	newToken := authTokenFromResponse(resp)
+	if newToken == "" {
+		t.Fatal("expected a re-issued auth_token cookie after profile update")
+	}
+	meResp, err := authedGet(newToken, baseURL+"/auth/me")
+	if err != nil {
+		t.Fatalf("/auth/me request failed: %v", err)
+	}
+	defer meResp.Body.Close()
+	var me provider.AuthUser
+	if err := json.NewDecoder(meResp.Body).Decode(&me); err != nil {
+		t.Fatalf("decode /auth/me: %v", err)
+	}
+	if me.Username != "new_handle" || me.DisplayName != "New Name" {
+		t.Errorf("/auth/me = {%q, %q}, want {new_handle, New Name}", me.Username, me.DisplayName)
+	}
+
+	// Persisted in the database.
+	pool, err := pgxpool.New(context.Background(), testDatabaseURL)
+	if err != nil {
+		t.Fatalf("connect db: %v", err)
+	}
+	defer pool.Close()
+	var dbUsername, dbDisplayName string
+	if err := pool.QueryRow(context.Background(), "SELECT username, display_name FROM users WHERE id = $1", user.ID).Scan(&dbUsername, &dbDisplayName); err != nil {
+		t.Fatalf("querying updated user: %v", err)
+	}
+	if dbUsername != "new_handle" || dbDisplayName != "New Name" {
+		t.Errorf("db row = {%q, %q}, want {new_handle, New Name}", dbUsername, dbDisplayName)
+	}
+}
+
+func TestUpdateProfile_NormalizesUsername(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+	token := doGoogleLogin(t, baseURL, "profile-normalize")
+
+	body := `{"username":"Bold_Hawk","display_name":"Bold Hawk"}`
+	resp, err := http.DefaultClient.Do(authedJSONRequest(http.MethodPatch, baseURL+"/auth/profile", token, body))
+	if err != nil {
+		t.Fatalf("profile request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var user provider.AuthUser
+	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+		t.Fatalf("decode profile response: %v", err)
+	}
+	if user.Username != "bold_hawk" {
+		t.Errorf("expected normalized username %q, got %q", "bold_hawk", user.Username)
+	}
+}
+
+func TestUpdateProfile_DisplayNameNotUnique(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+	tokenA := doGoogleLogin(t, baseURL, "profile-dupdisplay-a")
+	tokenB := doGoogleLogin(t, baseURL, "profile-dupdisplay-b")
+
+	for _, tc := range []struct{ token, body string }{
+		{tokenA, `{"username":"handle_aaa","display_name":"Shared Name"}`},
+		{tokenB, `{"username":"handle_bbb","display_name":"Shared Name"}`},
+	} {
+		resp, err := http.DefaultClient.Do(authedJSONRequest(http.MethodPatch, baseURL+"/auth/profile", tc.token, tc.body))
+		if err != nil {
+			t.Fatalf("profile request failed: %v", err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200 for shared display name %q, got %d", tc.body, resp.StatusCode)
+		}
+	}
+}
+
+func TestUpdateProfile_UsernameConflict(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+	tokenA := doGoogleLogin(t, baseURL, "profile-conflict-a")
+	tokenB := doGoogleLogin(t, baseURL, "profile-conflict-b")
+
+	respA, err := http.DefaultClient.Do(authedJSONRequest(http.MethodPatch, baseURL+"/auth/profile", tokenA, `{"username":"taken_handle","display_name":"A"}`))
+	if err != nil {
+		t.Fatalf("user A profile request failed: %v", err)
+	}
+	respA.Body.Close()
+	if respA.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for user A, got %d", respA.StatusCode)
+	}
+
+	// A case variant normalizes to the same handle and must be rejected as a conflict.
+	respB, err := http.DefaultClient.Do(authedJSONRequest(http.MethodPatch, baseURL+"/auth/profile", tokenB, `{"username":"Taken_Handle","display_name":"B"}`))
+	if err != nil {
+		t.Fatalf("user B profile request failed: %v", err)
+	}
+	respB.Body.Close()
+	if respB.StatusCode != http.StatusConflict {
+		t.Errorf("expected 409 for case-insensitive username conflict, got %d", respB.StatusCode)
+	}
+}
+
+func TestUpdateProfile_InvalidInputs(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+	token := doGoogleLogin(t, baseURL, "profile-invalid")
+
+	longUsername := strings.Repeat("a", 21)
+	longDisplayName := strings.Repeat("a", 31)
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"username too short", `{"username":"ab","display_name":"Valid"}`},
+		{"username too long", fmt.Sprintf(`{"username":%q,"display_name":"Valid"}`, longUsername)},
+		{"username illegal chars", `{"username":"bad name!","display_name":"Valid"}`},
+		{"display name empty", `{"username":"good_handle","display_name":"   "}`},
+		{"display name too long", fmt.Sprintf(`{"username":"good_handle","display_name":%q}`, longDisplayName)},
+		//  (BEL) decodes to a valid rune, so this exercises the control-char rejection.
+		{"display name control char", "{\"username\":\"good_handle\",\"display_name\":\"bad\\u0007name\"}"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := http.DefaultClient.Do(authedJSONRequest(http.MethodPatch, baseURL+"/auth/profile", token, tc.body))
+			if err != nil {
+				t.Fatalf("profile request failed: %v", err)
+			}
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Errorf("expected 400 for %s, got %d", tc.name, resp.StatusCode)
+			}
+		})
+	}
+}
+
+func TestUpdateProfile_Unauthorized(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+
+	req, _ := http.NewRequest(http.MethodPatch, baseURL+"/auth/profile", strings.NewReader(`{"username":"new_handle","display_name":"New Name"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", resp.StatusCode)
 	}
 }
 
