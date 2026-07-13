@@ -96,7 +96,7 @@ The core "set your own lineup" feature. A lineup is a set of starter player IDs 
 | GET | `/players` | Active fantasy players (slim shape) for the lineup picker / search |
 | POST | `/admin/sync-players` | Behind `ADMIN_SECRET`. Fetches full Sleeper player map + DynastyProcess rankings CSV in parallel, computes rarity tiers, upserts all players, invalidates roster cache |
 | GET | `/healthz` | Pings DB; 200/503. Used by load balancer and test `waitForReady` |
-| `/` | SPA fallback | Serves `web/dist` (built frontend) |
+| `/` | Catch-all | Plain JSON 404 for unmatched paths (API host serves no frontend) |
 
 ---
 

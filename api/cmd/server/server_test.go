@@ -1990,6 +1990,24 @@ func TestGetPlayers(t *testing.T) {
 	}
 }
 
+func TestUnmatchedRoute_Returns404JSON(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+
+	resp, err := http.Get(baseURL + "/some/unmatched/path")
+	if err != nil {
+		t.Fatalf("GET /some/unmatched/path: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	}
+
+	if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
+		t.Errorf("expected application/json content type, got %q", ct)
+	}
+}
+
 func TestResponseWriter_DefaultsTo200(t *testing.T) {
 	rec := httptest.NewRecorder()
 	rw := newResponseWriter(rec)
