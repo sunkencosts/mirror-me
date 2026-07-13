@@ -20,6 +20,7 @@ type lineupStore interface {
 	GetLineup(ctx context.Context, id string) (provider.Lineup, error)
 	UpdateLineup(ctx context.Context, id string, starters []string) (provider.Lineup, error)
 	ListLineups(ctx context.Context, userID, leagueID string, weekNumber int, rosterID *int) ([]provider.Lineup, error)
+	UserIsRegistered(ctx context.Context, userID string) (bool, error)
 	weekLockStore
 }
 
@@ -223,6 +224,15 @@ func HandleListLineups(store lineupStore) http.Handler {
 			http.Error(w, "failed to list lineups", http.StatusInternalServerError)
 			return
 		}
+
+		if !isOwnerRequest(r, userID) {
+			lineups, err = hidePreLockLineups(r.Context(), store, userID, lineups)
+			if err != nil {
+				http.Error(w, "failed to check lineup visibility", http.StatusInternalServerError)
+				return
+			}
+		}
+
 		// When a specific week was requested, all lineups share one (season, week), so one lock
 		// lookup annotates them all. The all-weeks listing is for discovery only — skip the
 		// per-week lock annotation (it isn't meaningful across mixed weeks).
@@ -238,6 +248,43 @@ func HandleListLineups(store lineupStore) http.Handler {
 		_ = encode(w, r, http.StatusOK, lineups)
 	})
 }
+
+// isOwnerRequest reports whether the request is authenticated as the exact user_id being
+// queried — the only case that bypasses the pre-lock visibility gate below (GH #9).
+func isOwnerRequest(r *http.Request, userID string) bool {
+	claims, ok := ClaimsFromContext(r.Context())
+	return ok && claims.Subject == userID
+}
+
+// hidePreLockLineups implements GH #9: a caller who isn't the owner may only see lineups
+// for weeks that have already locked. Anonymous ids (no matching users row — unguessable,
+// not harvestable via GET /leaderboard) keep today's fully-public behavior; registered
+// account ids (harvestable via /leaderboard) are gated by lock status so a top-ranked
+// setter's picks can't be copied before kickoff.
+func hidePreLockLineups(ctx context.Context, store lineupStore, userID string, lineups []provider.Lineup) ([]provider.Lineup, error) {
+	if len(lineups) == 0 {
+		return lineups, nil
+	}
+	registered, err := store.UserIsRegistered(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("checking user registration: %w", err)
+	}
+	if !registered {
+		return lineups, nil
+	}
+	visible := make([]provider.Lineup, 0, len(lineups))
+	for _, l := range lineups {
+		locked, _, err := weekLocked(ctx, store, l.Season, l.WeekNumber)
+		if err != nil {
+			return nil, fmt.Errorf("checking week lock: %w", err)
+		}
+		if locked {
+			visible = append(visible, l)
+		}
+	}
+	return visible, nil
+}
+
 func HandleGetLineupByID(store lineupStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
