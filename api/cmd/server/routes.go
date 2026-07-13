@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"net/http"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/sunkencosts/mirrorleague/internal/db"
@@ -58,7 +56,7 @@ func addRoutes(mux *http.ServeMux, sleeperClient sleeperDeps, store *db.Store, c
 	mux.Handle("GET /league/{leagueId}/leaderboard", handlers.HandleLeagueLeaderboard(store, cfg.CurrentSeason))
 	mux.Handle("GET /league/{leagueId}", handlers.HandleGetLeague(sleeperClient))
 	mux.HandleFunc("GET /healthz", handleHealthz(store))
-	mux.Handle("/", spaHandler("web/dist"))
+	mux.Handle("/", handleNotFound())
 }
 
 func handleHealthz(store *db.Store) http.HandlerFunc {
@@ -73,13 +71,10 @@ func handleHealthz(store *db.Store) http.HandlerFunc {
 	}
 }
 
-func spaHandler(distDir string) http.HandlerFunc {
+func handleNotFound() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		path := filepath.Join(distDir, filepath.Clean("/"+r.URL.Path))
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			http.ServeFile(w, r, filepath.Join(distDir, "index.html"))
-			return
-		}
-		http.FileServer(http.Dir(distDir)).ServeHTTP(w, r)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"error":"not found"}`))
 	}
 }
