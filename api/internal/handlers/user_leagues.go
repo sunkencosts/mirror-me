@@ -51,9 +51,9 @@ func resolveUserID(r *http.Request, clientUserID string) string {
 
 func HandleSaveUserLeague(store userLeagueStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		req, err := decode[saveUserLeagueRequest](r)
+		req, err := decode[saveUserLeagueRequest](w, r)
 		if err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			writeDecodeError(w, err)
 			return
 		}
 		userID := resolveUserID(r, req.UserID)
@@ -102,9 +102,9 @@ func HandleListUserLeagues(store userLeagueStore) http.Handler {
 func HandleUpdateUserLeague(store userLeagueStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		leagueID := r.PathValue("leagueId")
-		req, err := decode[updateUserLeagueRequest](r)
+		req, err := decode[updateUserLeagueRequest](w, r)
 		if err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			writeDecodeError(w, err)
 			return
 		}
 		source := r.URL.Query().Get("source")

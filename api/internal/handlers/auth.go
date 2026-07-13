@@ -191,9 +191,9 @@ func HandleUpdateProfile(store profileStore, jwtSecret []byte, secure bool) http
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		req, err := decode[updateProfileRequest](r)
+		req, err := decode[updateProfileRequest](w, r)
 		if err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			writeDecodeError(w, err)
 			return
 		}
 		username, err := normalizeUsername(req.Username)
@@ -238,8 +238,12 @@ func HandleMerge(store authStore) http.Handler {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		req, err := decode[mergeRequest](r)
-		if err != nil || req.AnonymousID == "" {
+		req, err := decode[mergeRequest](w, r)
+		if err != nil {
+			writeDecodeError(w, err)
+			return
+		}
+		if req.AnonymousID == "" {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}

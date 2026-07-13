@@ -77,9 +77,9 @@ func HandleCreateLineup(store lineupStore, p lineupCreateProvider) http.Handler 
 			return
 		}
 
-		req, err := decode[createLineupRequest](r)
+		req, err := decode[createLineupRequest](w, r)
 		if err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			writeDecodeError(w, err)
 			return
 		}
 
@@ -135,9 +135,9 @@ func HandleUpdateLineup(store lineupStore, p lineupCreateProvider) http.Handler 
 			return
 		}
 
-		req, err := decode[updateLineupRequest](r)
+		req, err := decode[updateLineupRequest](w, r)
 		if err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			writeDecodeError(w, err)
 			return
 		}
 

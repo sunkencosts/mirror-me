@@ -2342,3 +2342,103 @@ func TestResponseWriter_CapturesStatus(t *testing.T) {
 		t.Errorf("underlying writer not called: want 404, got %d", rec.Code)
 	}
 }
+
+// TestRateLimit_PublicRoute_ExceedingBurst_Returns429 hammers an unauthenticated,
+// Sleeper-proxying route from a single client (GH #13) — without a per-IP limiter this
+// traffic passes straight through to Sleeper on every request. Requests within the burst
+// should succeed; once the bucket is exhausted, further requests should be rejected with
+// 429 rather than forwarded.
+func TestRateLimit_PublicRoute_ExceedingBurst_Returns429(t *testing.T) {
+	baseURL := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/league/abc/rosters":
+			json.NewEncoder(w).Encode([]map[string]any{})
+		case "/league/abc/users":
+			json.NewEncoder(w).Encode([]map[string]any{})
+		}
+	}))
+
+	var sawTooManyRequests bool
+	var okCount int
+	// rateLimitBurst+extra requests fired back-to-back from the same source IP; the token
+	// bucket cannot refill meaningfully in this span, so at least one must be rejected.
+	for i := 0; i < rateLimitBurst+10; i++ {
+		resp, err := http.Get(baseURL + "/league/abc/rosters")
+		if err != nil {
+			t.Fatalf("request %d failed: %v", i, err)
+		}
+		resp.Body.Close()
+		switch resp.StatusCode {
+		case http.StatusOK:
+			okCount++
+		case http.StatusTooManyRequests:
+			sawTooManyRequests = true
+		default:
+			t.Fatalf("request %d: unexpected status %d", i, resp.StatusCode)
+		}
+	}
+
+	if !sawTooManyRequests {
+		t.Fatal("expected at least one 429 once the per-IP burst was exceeded")
+	}
+	if okCount == 0 {
+		t.Fatal("expected at least one request within the burst to succeed")
+	}
+	if okCount > rateLimitBurst {
+		t.Errorf("expected at most %d requests to succeed within the burst, got %d", rateLimitBurst, okCount)
+	}
+}
+
+// TestRateLimit_UnaffectedRoute_NotLimited confirms the limiter is scoped to the
+// public/proxying routes it was wired onto, not applied globally — /healthz should never
+// 429 no matter how many times it's hit.
+func TestRateLimit_UnaffectedRoute_NotLimited(t *testing.T) {
+	baseURL := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+
+	for i := 0; i < rateLimitBurst+10; i++ {
+		resp, err := http.Get(baseURL + "/healthz")
+		if err != nil {
+			t.Fatalf("request %d failed: %v", i, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("request %d: expected 200, got %d", i, resp.StatusCode)
+		}
+	}
+}
+
+// TestCollect_BodyTooLarge_Returns413 posts a body well past the 64KiB cap decode()
+// enforces (GH #13) to the one unauthenticated write endpoint in the API. Without a body
+// cap this would be read into memory in full before any validation runs.
+func TestCollect_BodyTooLarge_Returns413(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+
+	oversizedPath := `"` + strings.Repeat("x", 100*1024) + `"`
+	body := `{"visitor_id":"v1","path":` + oversizedPath + `}`
+
+	resp, err := http.Post(baseURL+"/collect", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d", resp.StatusCode)
+	}
+}
+
+// TestCollect_NormalBody_Succeeds is the happy-path counterpart to the 413 test above —
+// confirms wiring http.MaxBytesReader into decode() didn't break ordinary small requests.
+func TestCollect_NormalBody_Succeeds(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+
+	resp, err := http.Post(baseURL+"/collect", "application/json", strings.NewReader(`{"visitor_id":"v1","path":"/home"}`))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", resp.StatusCode)
+	}
+}
