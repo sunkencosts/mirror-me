@@ -1091,6 +1091,90 @@ func TestCreateLineup_InvalidPlayer(t *testing.T) {
 	}
 }
 
+// lineupSleeperHandlerMatchupsUnavailable mirrors lineupSleeperHandler but makes the
+// matchups fetch fail with a 503 (simulating a Sleeper outage) instead of returning
+// real matchup data. Used to verify GH #11: a failed matchup fetch must reject lineup
+// submission rather than silently skipping validation (the old D17 behavior).
+func lineupSleeperHandlerMatchupsUnavailable() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/league/test-league":
+			json.NewEncoder(w).Encode(map[string]any{"league_id": "test-league", "name": "Test League", "season": "2025"})
+		case "/league/test-league/matchups/1":
+			// Realistic Sleeper degradation: a non-200 with a valid, empty JSON body —
+			// not a broken/truncated one — so a decode-error check alone wouldn't catch
+			// this; only an explicit status-code check does.
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode([]map[string]any{})
+		case "/league/test-league/rosters":
+			json.NewEncoder(w).Encode([]map[string]any{
+				{"roster_id": 1, "owner_id": "owner1", "players": []string{"111", "222", "333"}, "starters": []string{"111"}},
+			})
+		case "/league/test-league/users":
+			json.NewEncoder(w).Encode([]map[string]any{
+				{"user_id": "owner1", "metadata": map[string]string{"team_name": "Test Team"}},
+			})
+		}
+	})
+}
+
+// lineupSleeperHandlerNoMatchupsPublished mirrors lineupSleeperHandler but returns a
+// legitimate, successful empty matchups response (e.g. matchups not published yet for
+// the week). Used to verify GH #11: this is the one case that should still skip
+// per-matchup validation (D17), unlike a fetch failure.
+func lineupSleeperHandlerNoMatchupsPublished() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/league/test-league":
+			json.NewEncoder(w).Encode(map[string]any{"league_id": "test-league", "name": "Test League", "season": "2025"})
+		case "/league/test-league/matchups/1":
+			json.NewEncoder(w).Encode([]map[string]any{})
+		case "/league/test-league/rosters":
+			json.NewEncoder(w).Encode([]map[string]any{
+				{"roster_id": 1, "owner_id": "owner1", "players": []string{"111", "222", "333"}, "starters": []string{"111"}},
+			})
+		case "/league/test-league/users":
+			json.NewEncoder(w).Encode([]map[string]any{
+				{"user_id": "owner1", "metadata": map[string]string{"team_name": "Test Team"}},
+			})
+		}
+	})
+}
+
+func TestCreateLineup_MatchupFetchFailsRejectsSubmission(t *testing.T) {
+	baseURL := newTestServer(t, lineupSleeperHandlerMatchupsUnavailable())
+	token := signTestJWT(testUserID, "test@example.com", "test_user")
+
+	// "999" isn't on the roster at all — if validation were silently skipped (the
+	// old D17 bug during an outage), this illegal lineup would be accepted.
+	body := `{"source":"sleeper","league_id":"test-league","roster_id":1,"week_number":1,"starters":["999"]}`
+	resp, err := http.DefaultClient.Do(authedJSONRequest(http.MethodPost, baseURL+"/lineups", token, body))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusCreated {
+		t.Fatal("expected lineup submission to be rejected when the matchup fetch fails, got 201 Created")
+	}
+}
+
+func TestCreateLineup_NoMatchupsPublishedStillAccepted(t *testing.T) {
+	baseURL := newTestServer(t, lineupSleeperHandlerNoMatchupsPublished())
+	token := signTestJWT(testUserID, "test@example.com", "test_user")
+
+	body := `{"source":"sleeper","league_id":"test-league","roster_id":1,"week_number":1,"starters":["111","222"]}`
+	resp, err := http.DefaultClient.Do(authedJSONRequest(http.MethodPost, baseURL+"/lineups", token, body))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected a legitimately empty (successful) matchups response to still allow lineup creation (D17), got %d", resp.StatusCode)
+	}
+}
+
 func TestGetLineup(t *testing.T) {
 	baseURL := newTestServer(t, lineupSleeperHandler())
 	token := signTestJWT(testUserID, "test@example.com", "test_user")

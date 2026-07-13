@@ -315,7 +315,12 @@ func validateStarters(ctx context.Context, p lineupMatchupProvider, leagueID str
 	}
 
 	if len(matchups) == 0 {
-		// No matchup data published for this week yet — skip validation (D17).
+		// D17: an empty, *successful* matchups response means Sleeper genuinely has no
+		// matchup data published for this week yet — skip validation. A failed fetch
+		// (non-200, timeout, decode error) is NOT this case: the sleeper client (GH #11)
+		// returns those as an error above, which this function already propagates instead
+		// of reaching here — so a Sleeper outage during submission correctly rejects the
+		// lineup rather than silently skipping validation.
 		return nil
 	}
 	matchup := provider.FindMatchup(matchups, rosterID)
