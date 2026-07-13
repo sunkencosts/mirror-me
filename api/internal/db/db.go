@@ -459,8 +459,9 @@ func (s *Store) GetCachedWeekMatchups(ctx context.Context, leagueID string, week
 // Player objects are stored as their IDs; player_points as jsonb. Best-effort write-through
 // for FINAL weeks so later reads skip Sleeper.
 func (s *Store) SaveWeekMatchups(ctx context.Context, leagueID string, week int, matchups []provider.WeekMatchup) error {
+	batch := &pgx.Batch{}
 	for _, m := range matchups {
-		_, err := s.pool.Exec(ctx, `
+		batch.Queue(`
 			INSERT INTO week_matchups
 			  (league_id, week, roster_id, matchup_id, owner_id, team_name, points, custom_points, players, starters, player_points)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -470,7 +471,12 @@ func (s *Store) SaveWeekMatchups(ctx context.Context, leagueID string, week int,
 			  starters = EXCLUDED.starters, player_points = EXCLUDED.player_points, fetched_at = now()`,
 			leagueID, week, m.RosterID, m.MatchupID, m.OwnerID, m.TeamName, m.Points, m.CustomPoints,
 			provider.PlayerIDs(m.Players), provider.PlayerIDs(m.Starters), m.PlayerPoints)
-		if err != nil {
+	}
+	results := s.pool.SendBatch(ctx, batch)
+	defer func() { _ = results.Close() }()
+
+	for _, m := range matchups {
+		if _, err := results.Exec(); err != nil {
 			return fmt.Errorf("saving week matchup %s/%d/r%d: %w", leagueID, week, m.RosterID, err)
 		}
 	}
