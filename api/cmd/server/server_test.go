@@ -615,6 +615,101 @@ func TestLogout_ClearsCookie(t *testing.T) {
 	t.Error("expected auth_token cookie with MaxAge < 0 in logout response")
 }
 
+// TestCors_VaryOriginSetOnCorsResponse asserts that any response passing through
+// corsMiddleware with an Origin header present includes "Vary: Origin", so caches
+// sitting in front of the API don't serve one origin's CORS headers to another.
+func TestCors_VaryOriginSetOnCorsResponse(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+
+	req, _ := http.NewRequest(http.MethodGet, baseURL+"/healthz", nil)
+	req.Header.Set("Origin", "http://localhost:9999")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if got := resp.Header.Get("Vary"); got != "Origin" {
+		t.Errorf("expected Vary: Origin, got %q", got)
+	}
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "http://localhost:9999" {
+		t.Errorf("expected Access-Control-Allow-Origin: http://localhost:9999, got %q", got)
+	}
+}
+
+// TestCors_PlainOptionsFallsThroughToRouting asserts a bare OPTIONS request with no
+// Origin header (and thus clearly not a CORS preflight) is not short-circuited into
+// a 204 — it should fall through to normal mux routing, which returns 404 for a path
+// with no registered handler.
+func TestCors_PlainOptionsFallsThroughToRouting(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+
+	req, _ := http.NewRequest(http.MethodOptions, baseURL+"/no-such-route", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNoContent {
+		t.Errorf("plain OPTIONS with no Origin header should not be short-circuited to 204, got %d", resp.StatusCode)
+	}
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404 from mux for unmatched route, got %d", resp.StatusCode)
+	}
+}
+
+// TestCors_OptionsWithOriginNoRequestMethodFallsThrough asserts that an OPTIONS
+// request with an Origin header but no Access-Control-Request-Method header is not
+// treated as a preflight (browsers always send both together for a real preflight).
+func TestCors_OptionsWithOriginNoRequestMethodFallsThrough(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+
+	req, _ := http.NewRequest(http.MethodOptions, baseURL+"/no-such-route", nil)
+	req.Header.Set("Origin", "http://localhost:9999")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNoContent {
+		t.Errorf("OPTIONS with Origin but no Access-Control-Request-Method should not be short-circuited to 204, got %d", resp.StatusCode)
+	}
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404 from mux for unmatched route, got %d", resp.StatusCode)
+	}
+}
+
+// TestCors_PreflightWithOriginAndRequestMethod asserts a genuine preflight request —
+// Origin + Access-Control-Request-Method both present — still gets the existing 204
+// CORS response with the right headers.
+func TestCors_PreflightWithOriginAndRequestMethod(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+
+	req, _ := http.NewRequest(http.MethodOptions, baseURL+"/healthz", nil)
+	req.Header.Set("Origin", "http://localhost:9999")
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected 204 for CORS preflight, got %d", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Vary"); got != "Origin" {
+		t.Errorf("expected Vary: Origin, got %q", got)
+	}
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "http://localhost:9999" {
+		t.Errorf("expected Access-Control-Allow-Origin: http://localhost:9999, got %q", got)
+	}
+	if got := resp.Header.Get("Access-Control-Allow-Methods"); got == "" {
+		t.Error("expected Access-Control-Allow-Methods to be set on preflight response")
+	}
+}
+
 func TestDevLogin_IssuesUsableToken(t *testing.T) {
 	baseURL := newTestServer(t, noopHandler(), map[string]string{"APP_ENV": "development"})
 
