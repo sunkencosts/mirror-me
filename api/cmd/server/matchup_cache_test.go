@@ -223,6 +223,75 @@ func TestCachingMatchups(t *testing.T) {
 		}
 	})
 
+	t.Run("SaveWeekMatchupsPersistsAllRostersInOneBatch", func(t *testing.T) {
+		const leagueID = "cache-multi-roster"
+		store := cacheTestStore(t, leagueID)
+
+		// Three distinct rosters in a single SaveWeekMatchups call, exercising the
+		// pgx.Batch conversion (GH #16): every row must land, not just the first/last.
+		multi := []provider.WeekMatchup{
+			{
+				RosterID: 1, MatchupID: 1, OwnerID: "mgr-1", TeamName: "Alpha", Points: 67,
+				Players:      []provider.Player{{PlayerID: "111"}},
+				Starters:     []provider.Player{{PlayerID: "111"}},
+				PlayerPoints: map[string]float64{"111": 25},
+			},
+			{
+				RosterID: 2, MatchupID: 1, OwnerID: "mgr-2", TeamName: "Bravo", Points: 88,
+				Players:      []provider.Player{{PlayerID: "222"}},
+				Starters:     []provider.Player{{PlayerID: "222"}},
+				PlayerPoints: map[string]float64{"222": 30},
+			},
+			{
+				RosterID: 3, MatchupID: 2, OwnerID: "mgr-3", TeamName: "Charlie", Points: 55,
+				Players:      []provider.Player{{PlayerID: "333"}},
+				Starters:     []provider.Player{{PlayerID: "333"}},
+				PlayerPoints: map[string]float64{"333": 15},
+			},
+		}
+		if err := store.SaveWeekMatchups(ctx, leagueID, 4, multi); err != nil {
+			t.Fatalf("SaveWeekMatchups: %v", err)
+		}
+
+		got, ok, err := store.GetCachedWeekMatchups(ctx, leagueID, 4)
+		if err != nil || !ok {
+			t.Fatalf("expected all rosters to persist (ok=%v, err=%v)", ok, err)
+		}
+		if len(got) != 3 {
+			t.Fatalf("expected 3 persisted matchups, got %d: %+v", len(got), got)
+		}
+		for i, want := range []struct {
+			rosterID int
+			owner    string
+			points   float64
+		}{{1, "mgr-1", 67}, {2, "mgr-2", 88}, {3, "mgr-3", 55}} {
+			if got[i].RosterID != want.rosterID || got[i].OwnerID != want.owner || got[i].Points != want.points {
+				t.Errorf("roster %d: got %+v, want roster_id=%d owner=%s points=%v",
+					i, got[i], want.rosterID, want.owner, want.points)
+			}
+		}
+
+		// Re-saving with one roster's points changed exercises the ON CONFLICT upsert path
+		// inside the batch, alongside two unchanged rosters, and must not disturb the others.
+		multi[1].Points = 999
+		if err := store.SaveWeekMatchups(ctx, leagueID, 4, multi); err != nil {
+			t.Fatalf("re-SaveWeekMatchups: %v", err)
+		}
+		got, ok, err = store.GetCachedWeekMatchups(ctx, leagueID, 4)
+		if err != nil || !ok {
+			t.Fatalf("expected rosters to still be cached after upsert (ok=%v, err=%v)", ok, err)
+		}
+		if len(got) != 3 {
+			t.Fatalf("expected 3 persisted matchups after upsert, got %d", len(got))
+		}
+		if got[1].Points != 999 {
+			t.Errorf("expected roster 2 points to update to 999, got %v", got[1].Points)
+		}
+		if got[0].Points != 67 || got[2].Points != 55 {
+			t.Errorf("expected untouched rosters to keep their points, got roster1=%v roster3=%v", got[0].Points, got[2].Points)
+		}
+	})
+
 	t.Run("SleeperErrorPropagatesOnMiss", func(t *testing.T) {
 		const leagueID = "cache-err"
 		store := cacheTestStore(t, leagueID)
