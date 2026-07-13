@@ -37,10 +37,11 @@ func addRoutes(mux *http.ServeMux, sleeperClient sleeperDeps, store *db.Store, c
 		mux.Handle("GET /dev/login", handlers.HandleDevLogin(jwtSecret, cfg.FrontendURL, cfg.DevLoginUserID, cfg.DevLoginEmail, cfg.DevLoginUsername))
 	}
 
-	mux.Handle("POST /league-bookmarks", handlers.HandleSaveUserLeague(store))
-	mux.Handle("GET /league-bookmarks", handlers.HandleListUserLeagues(store))
-	mux.Handle("PATCH /league-bookmarks/{leagueId}", handlers.HandleUpdateUserLeague(store))
-	mux.Handle("DELETE /league-bookmarks/{leagueId}", handlers.HandleDeleteUserLeague(store))
+	optionalAuth := handlers.OptionalAuth(jwtSecret)
+	mux.Handle("POST /league-bookmarks", optionalAuth(handlers.HandleSaveUserLeague(store)))
+	mux.Handle("GET /league-bookmarks", optionalAuth(handlers.HandleListUserLeagues(store)))
+	mux.Handle("PATCH /league-bookmarks/{leagueId}", optionalAuth(handlers.HandleUpdateUserLeague(store)))
+	mux.Handle("DELETE /league-bookmarks/{leagueId}", optionalAuth(handlers.HandleDeleteUserLeague(store)))
 	mux.Handle("POST /lineups", requireAuth(handlers.HandleCreateLineup(store, sleeperClient)))
 	mux.Handle("PATCH /lineups/{id}", requireAuth(handlers.HandleUpdateLineup(store, sleeperClient)))
 	mux.Handle("GET /lineups", handlers.HandleListLineups(store))

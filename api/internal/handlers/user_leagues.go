@@ -37,6 +37,18 @@ func iconForSource(source string) string {
 	return sourceIcons[source]
 }
 
+// resolveUserID returns the acting user's id. Signed-in requests (OptionalAuth found a
+// valid JWT) always use the claims subject, ignoring any client-supplied id — otherwise a
+// signed-in user could read or mutate another signed-in user's bookmarks by passing their
+// id. Anonymous requests fall back to the client-supplied id (the unguessable localStorage
+// UUID is the anon trust model).
+func resolveUserID(r *http.Request, clientUserID string) string {
+	if claims, ok := ClaimsFromContext(r.Context()); ok {
+		return claims.Subject
+	}
+	return clientUserID
+}
+
 func HandleSaveUserLeague(store userLeagueStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		req, err := decode[saveUserLeagueRequest](r)
@@ -44,7 +56,8 @@ func HandleSaveUserLeague(store userLeagueStore) http.Handler {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
-		if req.UserID == "" || req.LeagueID == "" || req.Source == "" {
+		userID := resolveUserID(r, req.UserID)
+		if userID == "" || req.LeagueID == "" || req.Source == "" {
 			http.Error(w, "missing user_id or league_id or source", http.StatusBadRequest)
 			return
 		}
@@ -52,7 +65,7 @@ func HandleSaveUserLeague(store userLeagueStore) http.Handler {
 			http.Error(w, "unknown source", http.StatusBadRequest)
 			return
 		}
-		ul, err := store.SaveUserLeague(r.Context(), req.UserID, req.LeagueID, req.Source, req.Label)
+		ul, err := store.SaveUserLeague(r.Context(), userID, req.LeagueID, req.Source, req.Label)
 		if err != nil {
 			http.Error(w, "failed to save bookmark", http.StatusInternalServerError)
 			return
@@ -64,7 +77,7 @@ func HandleSaveUserLeague(store userLeagueStore) http.Handler {
 
 func HandleListUserLeagues(store userLeagueStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID := r.URL.Query().Get("user_id")
+		userID := resolveUserID(r, r.URL.Query().Get("user_id"))
 		if userID == "" {
 			http.Error(w, "missing user_id", http.StatusBadRequest)
 			return
@@ -95,7 +108,8 @@ func HandleUpdateUserLeague(store userLeagueStore) http.Handler {
 			return
 		}
 		source := r.URL.Query().Get("source")
-		if req.UserID == "" || source == "" {
+		userID := resolveUserID(r, req.UserID)
+		if userID == "" || source == "" {
 			http.Error(w, "missing user_id or source", http.StatusBadRequest)
 			return
 		}
@@ -103,7 +117,7 @@ func HandleUpdateUserLeague(store userLeagueStore) http.Handler {
 			http.Error(w, "unknown source", http.StatusBadRequest)
 			return
 		}
-		ul, err := store.UpdateUserLeague(r.Context(), req.UserID, leagueID, source, req.Label)
+		ul, err := store.UpdateUserLeague(r.Context(), userID, leagueID, source, req.Label)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				http.Error(w, "bookmark not found", http.StatusNotFound)
@@ -120,7 +134,7 @@ func HandleUpdateUserLeague(store userLeagueStore) http.Handler {
 func HandleDeleteUserLeague(store userLeagueStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		leagueID := r.PathValue("leagueId")
-		userID := r.URL.Query().Get("user_id")
+		userID := resolveUserID(r, r.URL.Query().Get("user_id"))
 		source := r.URL.Query().Get("source")
 		if userID == "" || source == "" {
 			http.Error(w, "missing user_id or source", http.StatusBadRequest)

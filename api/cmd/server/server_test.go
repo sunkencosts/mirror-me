@@ -1955,6 +1955,120 @@ func TestDeleteUserLeague_NotFound(t *testing.T) {
 	}
 }
 
+// TestSaveUserLeague_AuthedUsesClaimsUserID verifies that an authenticated request cannot
+// choose which user a bookmark is saved under — the bookmark must be re-keyed to the JWT
+// subject even if the body claims a different user_id. See GH #8.
+func TestSaveUserLeague_AuthedUsesClaimsUserID(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+	token := signTestJWT("real-user", "real@test.example", "realuser")
+
+	body := `{"user_id":"victim-id","league_id":"league-1","source":"sleeper","label":"My League"}`
+	req := authedJSONRequest(http.MethodPost, baseURL+"/league-bookmarks", token, body)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var ul provider.UserLeague
+	if err := json.NewDecoder(resp.Body).Decode(&ul); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if ul.UserID != "real-user" {
+		t.Errorf("expected bookmark saved under claims subject %q, got %q", "real-user", ul.UserID)
+	}
+}
+
+// TestListUserLeagues_AuthedIgnoresQueryUserID verifies an authenticated attacker cannot
+// harvest another signed-in user's bookmarks by passing their user_id in the query string.
+func TestListUserLeagues_AuthedIgnoresQueryUserID(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+	saveTestUserLeague(t, baseURL, "victim-id", "league-1", "sleeper", "Victim League")
+
+	token := signTestJWT("attacker-id", "attacker@test.example", "attacker")
+	resp, err := authedGet(token, baseURL+"/league-bookmarks?user_id=victim-id")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var leagues []provider.UserLeague
+	if err := json.NewDecoder(resp.Body).Decode(&leagues); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if len(leagues) != 0 {
+		t.Errorf("expected attacker to see 0 of victim's bookmarks, got %d", len(leagues))
+	}
+}
+
+// TestUpdateUserLeague_AuthedCannotEditAnotherUsersBookmark verifies an authenticated
+// attacker cannot relabel another signed-in user's bookmark by passing their user_id.
+func TestUpdateUserLeague_AuthedCannotEditAnotherUsersBookmark(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+	saveTestUserLeague(t, baseURL, "victim-id", "league-1", "sleeper", "Victim Label")
+
+	token := signTestJWT("attacker-id", "attacker@test.example", "attacker")
+	body := `{"user_id":"victim-id","label":"Hijacked"}`
+	req := authedJSONRequest(http.MethodPatch, baseURL+"/league-bookmarks/league-1?source=sleeper", token, body)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404 (attacker doesn't own this bookmark), got %d", resp.StatusCode)
+	}
+
+	listResp, err := http.Get(baseURL + "/league-bookmarks?user_id=victim-id")
+	if err != nil {
+		t.Fatalf("list request failed: %v", err)
+	}
+	defer listResp.Body.Close()
+	var leagues []provider.UserLeague
+	if err := json.NewDecoder(listResp.Body).Decode(&leagues); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if len(leagues) != 1 || leagues[0].Label != "Victim Label" {
+		t.Errorf("expected victim's bookmark untouched, got %+v", leagues)
+	}
+}
+
+// TestDeleteUserLeague_AuthedCannotDeleteAnotherUsersBookmark verifies an authenticated
+// attacker cannot delete another signed-in user's bookmark by passing their user_id.
+func TestDeleteUserLeague_AuthedCannotDeleteAnotherUsersBookmark(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+	saveTestUserLeague(t, baseURL, "victim-id", "league-1", "sleeper", "Victim Bookmark")
+
+	token := signTestJWT("attacker-id", "attacker@test.example", "attacker")
+	req, _ := http.NewRequest(http.MethodDelete, baseURL+"/league-bookmarks/league-1?user_id=victim-id&source=sleeper", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404 (attacker doesn't own this bookmark), got %d", resp.StatusCode)
+	}
+
+	listResp, err := http.Get(baseURL + "/league-bookmarks?user_id=victim-id")
+	if err != nil {
+		t.Fatalf("list request failed: %v", err)
+	}
+	defer listResp.Body.Close()
+	var leagues []provider.UserLeague
+	if err := json.NewDecoder(listResp.Body).Decode(&leagues); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if len(leagues) != 1 {
+		t.Errorf("expected victim's bookmark to survive attacker's delete attempt, got %d", len(leagues))
+	}
+}
+
 func TestGetPlayers(t *testing.T) {
 	baseURL := newTestServer(t, noopHandler())
 
