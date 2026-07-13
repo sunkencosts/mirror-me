@@ -185,6 +185,31 @@ func timeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
 	}
 }
 
+// csrfProtect guards a mutating handler that trusts the auth cookie. The cookie is
+// SameSite=None; Secure in production (required by the split-origin frontend/API setup), and
+// decode() does not enforce Content-Type — together that lets a cross-site "simple" request
+// (a plain <form> POST or navigator.sendBeacon, neither of which triggers a CORS preflight)
+// carry the user's cookie to a mutating endpoint. Close that gap two ways: reject a present
+// Origin that doesn't match the configured frontend, and require Content-Type:
+// application/json so a cross-site POST is forced through preflight. A request with no Origin
+// header (same-origin browser navigation, curl, server-to-server) is allowed through — only a
+// present, mismatched Origin is rejected. See GH #12.
+func csrfProtect(frontendURL string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if origin := r.Header.Get("Origin"); origin != "" && origin != frontendURL {
+				http.Error(w, "cross-origin request rejected", http.StatusForbidden)
+				return
+			}
+			if contentType := r.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "application/json") {
+				http.Error(w, "Content-Type must be application/json", http.StatusUnsupportedMediaType)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func corsMiddleware(frontendURL string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

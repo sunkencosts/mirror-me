@@ -6,6 +6,21 @@ Base path: `/`
 
 ---
 
+## CSRF Protection
+
+`POST /lineups`, `POST /auth/merge`, `POST /league-bookmarks`, and `POST /collect` are
+guarded by the `csrfProtect` middleware (GH #12), because the `auth_token` cookie is
+`SameSite=None; Secure` in production (required by the split-origin frontend/API setup),
+which would otherwise let a cross-site "simple" request carry it without a CORS preflight.
+Each of these routes:
+- **403 Forbidden** if the `Origin` header is present and does not equal the configured
+  `FRONTEND_URL`. A request with no `Origin` header (same-origin navigation, curl,
+  server-to-server) is allowed through.
+- **415 Unsupported Media Type** if `Content-Type` is not `application/json`, forcing a
+  cross-site POST through preflight.
+
+---
+
 ## Auth
 
 Cookie-based Google OAuth. A successful login sets an `auth_token` JWT cookie
