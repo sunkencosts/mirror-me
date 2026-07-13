@@ -184,7 +184,11 @@ Update the starters for an existing lineup.
 ---
 
 ### `GET /lineups`
-List lineups matching the given filters.
+List lineups matching the given filters. Uses `OptionalAuth`. A caller who is not
+authenticated as `user_id` only sees lineups for weeks that have already locked, unless
+`user_id` is an anonymous (never signed-in) id — those keep the pre-existing fully-public
+behavior, since they aren't harvestable via `GET /leaderboard` the way a registered
+account's id is. This stops copying a top-ranked setter's picks before kickoff (GH #9).
 
 **Query params**
 | Param | Type | Required | Notes |

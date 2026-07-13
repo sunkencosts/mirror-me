@@ -156,6 +156,19 @@ func (s *Store) GetWeekLock(ctx context.Context, season string, week int) (time.
 	return locksAt, true, nil
 }
 
+// UserIsRegistered reports whether userID belongs to a real signed-in account (a row in
+// users) as opposed to an anonymous localStorage id that has never signed in. Registered
+// account ids are exposed publicly via the leaderboard, so callers use this to decide
+// whether a user_id is harvestable and therefore needs the pre-lock lineup visibility gate
+// (GH #9); anonymous ids are unguessable and keep the existing trust-the-caller model.
+func (s *Store) UserIsRegistered(ctx context.Context, userID string) (bool, error) {
+	var exists bool
+	if err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)`, userID).Scan(&exists); err != nil {
+		return false, fmt.Errorf("checking user %s is registered: %w", userID, err)
+	}
+	return exists, nil
+}
+
 func (s *Store) ListLineups(ctx context.Context, userID, leagueID string, weekNumber int, rosterID *int) ([]provider.Lineup, error) {
 	query := `
 		SELECT id, user_id, league_id, source, roster_id, week_number, season, starters, created_at, updated_at

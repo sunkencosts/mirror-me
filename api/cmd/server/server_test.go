@@ -1647,6 +1647,122 @@ func TestUpdateLineup_AllowedBeforeLock(t *testing.T) {
 	}
 }
 
+// TestListLineups_NonOwnerHidesPreLockLineups verifies the GH #9 fix: an unauthenticated
+// caller who knows a registered user's real user_id (e.g. harvested from GET /leaderboard)
+// cannot read that user's lineup for a week that has not yet locked.
+func TestListLineups_NonOwnerHidesPreLockLineups(t *testing.T) {
+	baseURL := newTestServer(t, lineupSleeperHandler())
+	victimToken := doGoogleLogin(t, baseURL, "lineup-victim-prelock")
+	victimClaims, err := jwtauth.Validate([]byte(testJWTSecret), victimToken)
+	if err != nil {
+		t.Fatalf("failed to validate victim token: %v", err)
+	}
+	victimID := victimClaims.Subject
+
+	seedWeekLock(t, "2025", 1, time.Now().Add(time.Hour)) // not yet locked
+	createTestLineup(t, baseURL, victimToken)
+
+	resp, err := http.Get(baseURL + "/lineups?user_id=" + victimID + "&league_id=test-league&week_number=1")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var lineups []provider.Lineup
+	if err := json.NewDecoder(resp.Body).Decode(&lineups); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(lineups) != 0 {
+		t.Errorf("expected pre-lock lineup hidden from non-owner, got %d", len(lineups))
+	}
+}
+
+// TestListLineups_NonOwnerSeesPostLockLineups verifies visibility is restored once the
+// week locks — pre-lock secrecy is the whole point, post-lock is what the results
+// browser is for.
+func TestListLineups_NonOwnerSeesPostLockLineups(t *testing.T) {
+	baseURL := newTestServer(t, lineupSleeperHandler())
+	victimToken := doGoogleLogin(t, baseURL, "lineup-victim-postlock")
+	victimClaims, err := jwtauth.Validate([]byte(testJWTSecret), victimToken)
+	if err != nil {
+		t.Fatalf("failed to validate victim token: %v", err)
+	}
+	victimID := victimClaims.Subject
+
+	seedWeekLock(t, "2025", 1, time.Now().Add(time.Hour))
+	createTestLineup(t, baseURL, victimToken)
+	seedWeekLock(t, "2025", 1, time.Now().Add(-time.Hour)) // kickoff passes
+
+	resp, err := http.Get(baseURL + "/lineups?user_id=" + victimID + "&league_id=test-league&week_number=1")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	var lineups []provider.Lineup
+	if err := json.NewDecoder(resp.Body).Decode(&lineups); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(lineups) != 1 {
+		t.Errorf("expected post-lock lineup visible to non-owner, got %d", len(lineups))
+	}
+}
+
+// TestListLineups_OwnerSeesOwnPreLockLineups verifies the fix doesn't regress the normal
+// case: an authenticated user reading their own lineups always sees everything, locked or
+// not.
+func TestListLineups_OwnerSeesOwnPreLockLineups(t *testing.T) {
+	baseURL := newTestServer(t, lineupSleeperHandler())
+	token := doGoogleLogin(t, baseURL, "lineup-owner-prelock")
+	claims, err := jwtauth.Validate([]byte(testJWTSecret), token)
+	if err != nil {
+		t.Fatalf("failed to validate token: %v", err)
+	}
+	userID := claims.Subject
+
+	seedWeekLock(t, "2025", 1, time.Now().Add(time.Hour)) // not yet locked
+	createTestLineup(t, baseURL, token)
+
+	resp, err := authedGet(token, baseURL+"/lineups?user_id="+userID+"&league_id=test-league&week_number=1")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	var lineups []provider.Lineup
+	if err := json.NewDecoder(resp.Body).Decode(&lineups); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(lineups) != 1 {
+		t.Errorf("expected owner to see their own pre-lock lineup, got %d", len(lineups))
+	}
+}
+
+// TestListLineups_AnonymousUserStillFullyVisible is a regression check: an anonymous
+// localStorage id (never signed in — no row in users) is not a harvestable identifier via
+// GET /leaderboard, so the pre-existing anon trust model (client-supplied id is trusted,
+// same as GH #8) must be unaffected by this fix.
+func TestListLineups_AnonymousUserStillFullyVisible(t *testing.T) {
+	baseURL := newTestServer(t, lineupSleeperHandler())
+	anonToken := signTestJWT(testUserID, "anon@example.com", "anon_user")
+
+	seedWeekLock(t, "2025", 1, time.Now().Add(time.Hour)) // not yet locked
+	createTestLineup(t, baseURL, anonToken)
+
+	resp, err := http.Get(baseURL + "/lineups?user_id=" + testUserID + "&league_id=test-league&week_number=1")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	var lineups []provider.Lineup
+	if err := json.NewDecoder(resp.Body).Decode(&lineups); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(lineups) != 1 {
+		t.Errorf("expected anon lineup still visible pre-lock, got %d", len(lineups))
+	}
+}
+
 func TestWeekMatchups_EnvelopeLockedTrue(t *testing.T) {
 	baseURL := newTestServer(t, weekLockMatchupHandler())
 	seedWeekLock(t, "2025", 8, time.Now().Add(-time.Hour))
