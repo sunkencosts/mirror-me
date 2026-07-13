@@ -53,7 +53,10 @@ then redirects to `FRONTEND_URL`. Used for local testing.
 
 A user's saved references to Sleeper leagues, with optional labels. `user_id` is a
 client-generated UUID stored locally by the frontend for anonymous use, or the
-authenticated user's id after `POST /auth/merge`. These routes are **not** behind auth.
+authenticated user's id after `POST /auth/merge`. These routes use `OptionalAuth`: if the
+request carries a valid `auth_token`, the JWT subject is used as `user_id` and any
+client-supplied `user_id` is ignored; only unauthenticated (anonymous) requests fall back to
+the body/query `user_id`.
 
 ### `POST /league-bookmarks`
 Save a league bookmark (upserts — if the league is already saved, the label is updated).
