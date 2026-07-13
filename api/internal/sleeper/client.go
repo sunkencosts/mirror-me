@@ -40,6 +40,11 @@ const (
 	rosterCacheTTL            = 5 * time.Minute
 	matchupCacheTTLHistorical = 24 * time.Hour
 	matchupCacheTTLCurrent    = 2 * time.Minute
+
+	// httpClientTimeout bounds every Sleeper request. Request-scoped calls are already
+	// bounded by the server's request timeout middleware, but non-request-scoped callers
+	// (e.g. grading with a long-lived context) have nothing else stopping a hang.
+	httpClientTimeout = 10 * time.Second
 )
 
 type roster struct {
@@ -104,7 +109,7 @@ type playerLookup interface {
 func New(baseURL string, players playerLookup, currentWeek func(context.Context) int) *Client {
 	return &Client{
 		baseURL:      baseURL,
-		httpClient:   &http.Client{},
+		httpClient:   &http.Client{Timeout: httpClientTimeout},
 		players:      players,
 		currentWeek:  currentWeek,
 		rosterCache:  make(map[string]rosterCacheEntry),
@@ -154,6 +159,10 @@ func (c *Client) getLeagueUsers(ctx context.Context, leagueID string) (map[strin
 		return nil, fmt.Errorf("getting users for league %s: %w", leagueID, err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("sleeper returned status %d for league %s users", resp.StatusCode, leagueID)
+	}
 
 	var users []leagueUser
 	if err := json.NewDecoder(resp.Body).Decode(&users); err != nil {
@@ -210,9 +219,14 @@ func (c *Client) GetRosters(ctx context.Context, leagueID string) ([]provider.Ro
 		return nil, err
 	}
 
-	c.rosterMu.Lock()
-	c.rosterCache[leagueID] = rosterCacheEntry{rosters: rosters, fetchedAt: time.Now()}
-	c.rosterMu.Unlock()
+	// A real league always has rosters — zero rows most likely means Sleeper served a
+	// degraded-but-200 response. Don't lock that in for the cache TTL; just re-fetch
+	// next time (GH #11).
+	if len(rosters) > 0 {
+		c.rosterMu.Lock()
+		c.rosterCache[leagueID] = rosterCacheEntry{rosters: rosters, fetchedAt: time.Now()}
+		c.rosterMu.Unlock()
+	}
 
 	return rosters, nil
 }
@@ -238,6 +252,10 @@ func (c *Client) fetchRosters(ctx context.Context, leagueID string) ([]provider.
 			return
 		}
 		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			rosterErr = fmt.Errorf("sleeper returned status %d for league %s rosters", resp.StatusCode, leagueID)
+			return
+		}
 		if err := json.NewDecoder(resp.Body).Decode(&rawRosters); err != nil {
 			rosterErr = fmt.Errorf("decoding rosters: %w", err)
 		}
@@ -307,9 +325,14 @@ func (c *Client) GetWeekMatchups(ctx context.Context, leagueID string, week int)
 		return nil, err
 	}
 
-	c.matchupMu.Lock()
-	c.matchupCache[cacheKey] = matchupCacheEntry{matchups: matchups, fetchedAt: time.Now()}
-	c.matchupMu.Unlock()
+	// Zero matchups is a legitimate response for a week Sleeper hasn't published yet, but
+	// it's indistinguishable here from a degraded-but-200 response — so don't cache it for
+	// up to matchupCacheTTLHistorical; re-check next call instead (GH #11).
+	if len(matchups) > 0 {
+		c.matchupMu.Lock()
+		c.matchupCache[cacheKey] = matchupCacheEntry{matchups: matchups, fetchedAt: time.Now()}
+		c.matchupMu.Unlock()
+	}
 
 	return matchups, nil
 }
@@ -335,6 +358,10 @@ func (c *Client) fetchWeekMatchups(ctx context.Context, leagueID string, week in
 			return
 		}
 		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			matchupErr = fmt.Errorf("sleeper returned status %d for league %s week %d matchups", resp.StatusCode, leagueID, week)
+			return
+		}
 		if err := json.NewDecoder(resp.Body).Decode(&rawMatchups); err != nil {
 			matchupErr = fmt.Errorf("decoding matchups: %w", err)
 		}
