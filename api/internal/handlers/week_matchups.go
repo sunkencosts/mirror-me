@@ -14,7 +14,7 @@ type weekMatchupProvider interface {
 	GetLeague(ctx context.Context, leagueID string) (provider.League, error)
 }
 
-func HandleGetWeekMatchups(p weekMatchupProvider, store weekLockStore) http.Handler {
+func HandleGetWeekMatchups(p weekMatchupProvider, store weekLockStore, currentWeek func(context.Context) int) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		leagueID := r.PathValue("leagueId")
 		week, ok := parseWeek(r.PathValue("week"))
@@ -58,7 +58,7 @@ func HandleGetWeekMatchups(p weekMatchupProvider, store weekLockStore) http.Hand
 			season = league.Season
 		}
 
-		locked, locksAt, _ := weekLocked(r.Context(), store, season, week)
+		locked, locksAt, _ := weekLocked(r.Context(), store, season, week, currentWeek(r.Context()))
 
 		_ = encode(w, r, http.StatusOK, provider.WeekMatchupsResponse{
 			Locked:   locked,

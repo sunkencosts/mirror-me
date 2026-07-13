@@ -25,7 +25,8 @@ type lineupStore interface {
 }
 
 // weekLockStore is the lock lookup shared by the lineup gate and the week-matchups
-// envelope. A missing row means "not locked" (fail open).
+// envelope. A missing row is treated as "not locked" (fail open) ONLY for the current
+// or a future week; a missing row for a past week fails closed — see weekLocked.
 type weekLockStore interface {
 	GetWeekLock(ctx context.Context, season string, week int) (time.Time, bool, error)
 }
@@ -41,18 +42,39 @@ type lineupCreateProvider interface {
 	GetLeague(ctx context.Context, leagueID string) (provider.League, error)
 }
 
-// weekLocked reports whether (season, week) is locked as of now. A missing
-// week_locks row is treated as unlocked (fail open) and warned. LocksAt is nil
-// only when no row exists.
-func weekLocked(ctx context.Context, store weekLockStore, season string, week int) (bool, *time.Time, error) {
+// weekLocked reports whether (season, week) is locked as of now. currentWeek is the
+// live NFL week (see newCurrentWeekResolver) used to decide how to treat a missing
+// week_locks row:
+//
+//   - week < currentWeek (a past week): fails CLOSED. A past week can never
+//     legitimately lack a seeded kickoff — treating it as unlocked would let a lineup
+//     be created or edited after the games already happened (GH #14). Logged at error
+//     level: this codebase has no dedicated alerting/metrics pipeline (grepped for
+//     alert/metric/slack/webhook — none exists), so an error-level structured log is
+//     the proportionate substitute for "alert on this".
+//   - week >= currentWeek (the current or a future week): fails open, same as before.
+//     This is the expected, benign gap while a week's real kickoff hasn't been seeded
+//     yet — still logged, but only at warning level.
+//
+// LocksAt is nil whenever no row exists, in both branches — we don't know the real
+// kickoff time in that case.
+func weekLocked(ctx context.Context, store weekLockStore, season string, week, currentWeek int) (bool, *time.Time, error) {
 	locksAt, ok, err := store.GetWeekLock(ctx, season, week)
 	if err != nil {
 		return false, nil, err
 	}
 	if !ok {
-		slog.WarnContext(ctx, "no week_locks row; treating week as unlocked (fail open)",
-			slog.String("season", season), slog.Int("week", week))
-		return false, nil, nil
+		if week <= currentWeek {
+			slog.ErrorContext(ctx, "no week_locks row for the current or a past week",
+				slog.String("season", season), slog.Int("week", week), slog.Int("current_week", currentWeek))
+		} else {
+			slog.WarnContext(ctx, "no week_locks row; treating week as unlocked (fail open)",
+				slog.String("season", season), slog.Int("week", week))
+		}
+		if week < currentWeek {
+			return true, nil, nil // past week, no lock row: fail closed
+		}
+		return false, nil, nil // current/future week, no lock row yet: fail open
 	}
 	return !time.Now().Before(locksAt), &locksAt, nil
 }
@@ -69,7 +91,7 @@ type updateLineupRequest struct {
 	Starters []string `json:"starters"`
 }
 
-func HandleCreateLineup(store lineupStore, p lineupCreateProvider) http.Handler {
+func HandleCreateLineup(store lineupStore, p lineupCreateProvider, currentWeek func(context.Context) int) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims, ok := ClaimsFromContext(r.Context())
 		if !ok {
@@ -96,7 +118,7 @@ func HandleCreateLineup(store lineupStore, p lineupCreateProvider) http.Handler 
 			return
 		}
 
-		locked, _, err := weekLocked(r.Context(), store, league.Season, req.WeekNumber)
+		locked, _, err := weekLocked(r.Context(), store, league.Season, req.WeekNumber, currentWeek(r.Context()))
 		if err != nil {
 			http.Error(w, "failed to check lock", http.StatusInternalServerError)
 			return
@@ -121,7 +143,7 @@ func HandleCreateLineup(store lineupStore, p lineupCreateProvider) http.Handler 
 	})
 }
 
-func HandleUpdateLineup(store lineupStore, p lineupCreateProvider) http.Handler {
+func HandleUpdateLineup(store lineupStore, p lineupCreateProvider, currentWeek func(context.Context) int) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims, ok := ClaimsFromContext(r.Context())
 		if !ok {
@@ -155,7 +177,7 @@ func HandleUpdateLineup(store lineupStore, p lineupCreateProvider) http.Handler 
 			return
 		}
 
-		locked, _, err := weekLocked(r.Context(), store, existing.Season, existing.WeekNumber)
+		locked, _, err := weekLocked(r.Context(), store, existing.Season, existing.WeekNumber, currentWeek(r.Context()))
 		if err != nil {
 			http.Error(w, "failed to check lock", http.StatusInternalServerError)
 			return
@@ -185,7 +207,7 @@ func HandleUpdateLineup(store lineupStore, p lineupCreateProvider) http.Handler 
 	})
 }
 
-func HandleListLineups(store lineupStore) http.Handler {
+func HandleListLineups(store lineupStore, currentWeek func(context.Context) int) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		userID := r.URL.Query().Get("user_id")
 		if _, err := uuid.Parse(userID); err != nil {
@@ -226,7 +248,7 @@ func HandleListLineups(store lineupStore) http.Handler {
 		}
 
 		if !isOwnerRequest(r, userID) {
-			lineups, err = hidePreLockLineups(r.Context(), store, userID, lineups)
+			lineups, err = hidePreLockLineups(r.Context(), store, userID, lineups, currentWeek(r.Context()))
 			if err != nil {
 				http.Error(w, "failed to check lineup visibility", http.StatusInternalServerError)
 				return
@@ -237,7 +259,7 @@ func HandleListLineups(store lineupStore) http.Handler {
 		// lookup annotates them all. The all-weeks listing is for discovery only — skip the
 		// per-week lock annotation (it isn't meaningful across mixed weeks).
 		if weekNumber > 0 && len(lineups) > 0 {
-			locked, locksAt, lockErr := weekLocked(r.Context(), store, lineups[0].Season, weekNumber)
+			locked, locksAt, lockErr := weekLocked(r.Context(), store, lineups[0].Season, weekNumber, currentWeek(r.Context()))
 			if lockErr == nil {
 				for i := range lineups {
 					lineups[i].Locked = locked
@@ -261,7 +283,7 @@ func isOwnerRequest(r *http.Request, userID string) bool {
 // not harvestable via GET /leaderboard) keep today's fully-public behavior; registered
 // account ids (harvestable via /leaderboard) are gated by lock status so a top-ranked
 // setter's picks can't be copied before kickoff.
-func hidePreLockLineups(ctx context.Context, store lineupStore, userID string, lineups []provider.Lineup) ([]provider.Lineup, error) {
+func hidePreLockLineups(ctx context.Context, store lineupStore, userID string, lineups []provider.Lineup, currentWeek int) ([]provider.Lineup, error) {
 	if len(lineups) == 0 {
 		return lineups, nil
 	}
@@ -274,7 +296,7 @@ func hidePreLockLineups(ctx context.Context, store lineupStore, userID string, l
 	}
 	visible := make([]provider.Lineup, 0, len(lineups))
 	for _, l := range lineups {
-		locked, _, err := weekLocked(ctx, store, l.Season, l.WeekNumber)
+		locked, _, err := weekLocked(ctx, store, l.Season, l.WeekNumber, currentWeek)
 		if err != nil {
 			return nil, fmt.Errorf("checking week lock: %w", err)
 		}
@@ -285,7 +307,7 @@ func hidePreLockLineups(ctx context.Context, store lineupStore, userID string, l
 	return visible, nil
 }
 
-func HandleGetLineupByID(store lineupStore) http.Handler {
+func HandleGetLineupByID(store lineupStore, currentWeek func(context.Context) int) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		if _, err := uuid.Parse(id); err != nil {
@@ -301,7 +323,7 @@ func HandleGetLineupByID(store lineupStore) http.Handler {
 			http.Error(w, "failed to get lineup", http.StatusInternalServerError)
 			return
 		}
-		if locked, locksAt, lockErr := weekLocked(r.Context(), store, lineup.Season, lineup.WeekNumber); lockErr == nil {
+		if locked, locksAt, lockErr := weekLocked(r.Context(), store, lineup.Season, lineup.WeekNumber, currentWeek(r.Context())); lockErr == nil {
 			lineup.Locked = locked
 			lineup.LocksAt = locksAt
 		}

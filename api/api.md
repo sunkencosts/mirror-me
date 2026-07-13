@@ -268,7 +268,9 @@ Fetch each team's matchup for a week, enveloped with the lock state for that wee
 ```
 - `locked` — true once `now >= locks_at` (the week's first kickoff)
 - `locks_at` — kickoff of the week's first game (UTC); omitted when no lock is seeded
-  for the league's season + week (treated as not locked, fail open)
+  for the league's season + week. A missing row fails open (`locked: false`) for the
+  current or a future NFL week, but fails **closed** (`locked: true`) for any past
+  week — a past week can never legitimately have no seeded kickoff (GH #14).
 
 This is the lineup editor's source of truth for whether edits are still allowed.
 
@@ -470,5 +472,7 @@ Pings the database. Used by the server's `waitForReady` check in tests and by lo
 }
 ```
 - `season` — derived from the league at create time (immutable per `league_id`)
-- `locked` — true once the week's first kickoff has passed; populated on reads
+- `locked` — true once the week's first kickoff has passed; populated on reads. A
+  missing `week_locks` row fails open for the current/a future week, but fails
+  **closed** for any past week (GH #14) — see `GET /league/{leagueId}/week/{week}`.
 - `locks_at` — kickoff of the week's first game (UTC); omitted when no lock is seeded
