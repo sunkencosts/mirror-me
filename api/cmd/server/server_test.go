@@ -103,7 +103,12 @@ func TestMain(m *testing.M) {
 // observe the migration's actual effect.
 func TestMigration_SeedsWeek12And18Locks(t *testing.T) {
 	ctx := context.Background()
-	adminPool, err := pgxpool.New(ctx, "postgres://mirrorleague:mirrorleague@localhost:5433/mirrorleague")
+	// Connect via testDatabaseURL (mirrorleague_test) as the admin/control connection to
+	// CREATE/DROP the disposable database: it's the one database guaranteed to exist in
+	// every environment this suite runs in (local docker-compose seeds it via
+	// docker/init.sql; CI's postgres service sets POSTGRES_DB to it directly) — unlike
+	// the "mirrorleague" database, which only exists locally.
+	adminPool, err := pgxpool.New(ctx, testDatabaseURL)
 	if err != nil {
 		t.Fatalf("connect admin db: %v", err)
 	}
