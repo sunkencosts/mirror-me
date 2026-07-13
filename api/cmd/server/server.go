@@ -188,13 +188,22 @@ func timeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
 func corsMiddleware(frontendURL string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Header.Get("Origin") != "" {
+			origin := r.Header.Get("Origin")
+			if origin != "" {
+				// Vary: Origin tells any cache in front of this server that the response
+				// depends on the request's Origin header, so it must not serve a response
+				// built for one origin to a request from another.
+				w.Header().Set("Vary", "Origin")
 				w.Header().Set("Access-Control-Allow-Origin", frontendURL)
 				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 				w.Header().Set("Access-Control-Allow-Credentials", "true")
 			}
-			if r.Method == http.MethodOptions {
+			// Only a real CORS preflight (Origin + Access-Control-Request-Method both
+			// present, per the Fetch spec) short-circuits into the bare 204. A plain
+			// OPTIONS request with neither is not a preflight and must fall through to
+			// normal routing.
+			if r.Method == http.MethodOptions && origin != "" && r.Header.Get("Access-Control-Request-Method") != "" {
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
