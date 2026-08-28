@@ -94,6 +94,76 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// TestMigration_SeedsWeek12And18Locks verifies GH #14's migration (000009) actually
+// seeds week_locks rows for the 2026 weeks 12 and 18 gap the issue describes. It applies
+// migrations to a disposable, freshly created database rather than the shared
+// mirrorleague_test database: TestMain truncates week_locks on every run (each test then
+// owns its own lock rows via seedWeekLock), so by the time any test body executes, rows
+// inserted by the migration itself have already been wiped — this is the only way to
+// observe the migration's actual effect.
+func TestMigration_SeedsWeek12And18Locks(t *testing.T) {
+	ctx := context.Background()
+	// Connect via testDatabaseURL (mirrorleague_test) as the admin/control connection to
+	// CREATE/DROP the disposable database: it's the one database guaranteed to exist in
+	// every environment this suite runs in (local docker-compose seeds it via
+	// docker/init.sql; CI's postgres service sets POSTGRES_DB to it directly) — unlike
+	// the "mirrorleague" database, which only exists locally.
+	adminPool, err := pgxpool.New(ctx, testDatabaseURL)
+	if err != nil {
+		t.Fatalf("connect admin db: %v", err)
+	}
+	// Cleanups run LIFO: register Close first so the later-registered DROP DATABASE
+	// cleanup (which needs a live pool) runs before the pool is closed.
+	t.Cleanup(adminPool.Close)
+
+	dbName := fmt.Sprintf("mirrorleague_migration_check_%d", time.Now().UnixNano())
+	if _, err := adminPool.Exec(ctx, "CREATE DATABASE "+dbName); err != nil {
+		t.Fatalf("create disposable db: %v", err)
+	}
+	t.Cleanup(func() {
+		if _, err := adminPool.Exec(context.Background(), "DROP DATABASE "+dbName+" WITH (FORCE)"); err != nil {
+			t.Errorf("drop disposable db: %v", err)
+		}
+	})
+
+	migrateURL := "pgx5://mirrorleague:mirrorleague@localhost:5433/" + dbName
+	mg, err := migrate.New("file://../../migrations", migrateURL)
+	if err != nil {
+		t.Fatalf("create migrator: %v", err)
+	}
+	if err := mg.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		t.Fatalf("migrate up: %v", err)
+	}
+	if srcErr, dbErr := mg.Close(); srcErr != nil || dbErr != nil {
+		t.Fatalf("close migrator: src=%v db=%v", srcErr, dbErr)
+	}
+
+	checkPool, err := pgxpool.New(ctx, "postgres://mirrorleague:mirrorleague@localhost:5433/"+dbName)
+	if err != nil {
+		t.Fatalf("connect disposable db: %v", err)
+	}
+	defer checkPool.Close()
+
+	cases := []struct {
+		week        int
+		wantLocksAt time.Time
+	}{
+		{12, time.Date(2026, 11, 26, 17, 30, 0, 0, time.UTC)}, // Thanksgiving early game
+		{18, time.Date(2027, 1, 9, 18, 0, 0, 0, time.UTC)},    // earliest standard window
+	}
+	for _, c := range cases {
+		var locksAt time.Time
+		if err := checkPool.QueryRow(ctx,
+			`SELECT locks_at FROM week_locks WHERE season = '2026' AND week = $1`, c.week,
+		).Scan(&locksAt); err != nil {
+			t.Fatalf("week %d: query lock row: %v", c.week, err)
+		}
+		if !locksAt.Equal(c.wantLocksAt) {
+			t.Errorf("week %d: expected locks_at %v, got %v", c.week, c.wantLocksAt, locksAt)
+		}
+	}
+}
+
 func newTestServer(t *testing.T, sleeperHandler http.Handler, extraEnv ...map[string]string) string {
 	t.Helper()
 
@@ -1109,6 +1179,30 @@ func lineupSleeperHandler() http.Handler {
 	})
 }
 
+// lineupSleeperHandlerWeek5 is lineupSleeperHandler but serving week 5 matchups instead
+// of week 1 — used by the GH #14 current-week (not-past) fail-open test, which needs a
+// week number other than the ones already used by locked/unlocked lock tests.
+func lineupSleeperHandlerWeek5() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/league/test-league":
+			json.NewEncoder(w).Encode(map[string]any{"league_id": "test-league", "name": "Test League", "season": "2025"})
+		case "/league/test-league/matchups/5":
+			json.NewEncoder(w).Encode([]map[string]any{
+				{"roster_id": 1, "matchup_id": 1, "players": []string{"111", "222", "333"}, "starters": []string{"111"}, "points": 0.0},
+			})
+		case "/league/test-league/rosters":
+			json.NewEncoder(w).Encode([]map[string]any{
+				{"roster_id": 1, "owner_id": "owner1", "players": []string{"111", "222", "333"}, "starters": []string{"111"}},
+			})
+		case "/league/test-league/users":
+			json.NewEncoder(w).Encode([]map[string]any{
+				{"user_id": "owner1", "metadata": map[string]string{"team_name": "Test Team"}},
+			})
+		}
+	})
+}
+
 // createTestLineup posts a lineup authenticated as token and returns the created lineup.
 // user_id is taken from the JWT sub, not the request body.
 func createTestLineup(t *testing.T, baseURL, token string) provider.Lineup {
@@ -1692,6 +1786,21 @@ func seedWeekLock(t *testing.T, season string, week int, locksAt time.Time) {
 	}
 }
 
+// deleteWeekLock removes a week_locks row so a test can reproduce the GH #14 gap
+// scenario (a week whose lock row is missing) starting from a seeded, known state.
+func deleteWeekLock(t *testing.T, season string, week int) {
+	t.Helper()
+	pool, err := pgxpool.New(context.Background(), testDatabaseURL)
+	if err != nil {
+		t.Fatalf("deleteWeekLock: connect db: %v", err)
+	}
+	defer pool.Close()
+	if _, err := pool.Exec(context.Background(),
+		`DELETE FROM week_locks WHERE season = $1 AND week = $2`, season, week); err != nil {
+		t.Fatalf("deleteWeekLock: delete: %v", err)
+	}
+}
+
 // weekLockMatchupHandler serves league "abc" for week 8 (league object, matchups,
 // rosters, users) so the week-matchups envelope + lock state can be asserted.
 func weekLockMatchupHandler() http.Handler {
@@ -2014,6 +2123,28 @@ func TestWeekMatchups_EnvelopeNoRow(t *testing.T) {
 	}
 }
 
+// GH #14: the week-matchups envelope shares weekLocked with the lineup write gate, so a
+// past week with no lock row must report locked=true there too — otherwise the read view
+// would tell a user a long-past week is still open while POST/PATCH correctly reject it.
+func TestWeekMatchups_EnvelopePastWeekNoLockRow_FailsClosed(t *testing.T) {
+	baseURL := newTestServer(t, weekLockMatchupHandler(), map[string]string{"CURRENT_WEEK": "9"})
+	// No week_locks row seeded for week 8 (< current week 9).
+
+	resp, err := http.Get(baseURL + "/league/abc/week/8")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var envelope provider.WeekMatchupsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if !envelope.Locked {
+		t.Error("expected locked=true for a past week with no lock row (fail closed)")
+	}
+}
+
 func TestLineupRead_EchoesLocked(t *testing.T) {
 	baseURL := newTestServer(t, lineupSleeperHandler())
 	token := signTestJWT(testUserID, "test@example.com", "test_user")
@@ -2034,6 +2165,74 @@ func TestLineupRead_EchoesLocked(t *testing.T) {
 	}
 	if !lineup.Locked {
 		t.Error("expected lineup read to echo locked=true after kickoff")
+	}
+}
+
+// GH #14: a missing week_locks row must fail CLOSED for any past week (week number
+// strictly less than the resolved current week) — a past week can never legitimately
+// lack a seeded kickoff, and treating it as unlocked would let a lineup be created or
+// edited after the games already happened. CURRENT_WEEK pins the resolved current
+// week deterministically so the test doesn't depend on real kickoff seed data.
+func TestCreateLineup_PastWeekNoLockRow_FailsClosed(t *testing.T) {
+	baseURL := newTestServer(t, lineupSleeperHandler(), map[string]string{"CURRENT_WEEK": "5"})
+	token := signTestJWT(testUserID, "test@example.com", "test_user")
+	// No week_locks row seeded for week 1 (< current week 5).
+
+	body := `{"source":"sleeper","league_id":"test-league","roster_id":1,"week_number":1,"starters":["111","222"]}`
+	resp, err := http.DefaultClient.Do(authedJSONRequest(http.MethodPost, baseURL+"/lineups", token, body))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("expected 409 for past week with no lock row (fail closed), got %d", resp.StatusCode)
+	}
+}
+
+// GH #14: the fix's literal requirement is narrower than "fail closed whenever a row is
+// missing" — only a week strictly BEFORE the current week fails closed. A missing row for
+// the current week (or a future week) must still fail open, exactly as before, since that
+// gap is expected until the real kickoff is seeded.
+func TestCreateLineup_CurrentWeekNoLockRow_StillFailsOpen(t *testing.T) {
+	baseURL := newTestServer(t, lineupSleeperHandlerWeek5(), map[string]string{"CURRENT_WEEK": "5"})
+	token := signTestJWT(testUserID, "test@example.com", "test_user")
+	// No week_locks row seeded for week 5 (== current week 5, not < it).
+
+	body := `{"source":"sleeper","league_id":"test-league","roster_id":1,"week_number":5,"starters":["111","222"]}`
+	resp, err := http.DefaultClient.Do(authedJSONRequest(http.MethodPost, baseURL+"/lineups", token, body))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201 for current week with no lock row (fail open), got %d", resp.StatusCode)
+	}
+}
+
+// GH #14: same fail-closed rule applies to the update path — a past week with no lock
+// row must reject an edit even for an existing lineup, not just a create. The server is
+// pinned to current week 5 for the whole test; week 1 is seeded with a future locksAt
+// just long enough to create the lineup, then the row is deleted to reproduce the
+// week_locks gap the issue describes (e.g. weeks 12/18 before this fix's migration).
+func TestUpdateLineup_PastWeekNoLockRow_FailsClosed(t *testing.T) {
+	baseURL := newTestServer(t, lineupSleeperHandler(), map[string]string{"CURRENT_WEEK": "5"})
+	token := signTestJWT(testUserID, "test@example.com", "test_user")
+	seedWeekLock(t, "2025", 1, time.Now().Add(time.Hour)) // not yet locked — allow create
+	created := createTestLineup(t, baseURL, token)
+
+	deleteWeekLock(t, "2025", 1)
+
+	body := `{"starters":["111","333"]}`
+	resp, err := http.DefaultClient.Do(authedJSONRequest(http.MethodPatch, baseURL+"/lineups/"+created.ID, token, body))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("expected 409 for past week with no lock row (fail closed), got %d", resp.StatusCode)
 	}
 }
 
