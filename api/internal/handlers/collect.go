@@ -26,9 +26,9 @@ type collectRequest struct {
 // localStorage.
 func HandleCollect(store visitStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		req, err := decode[collectRequest](r)
+		req, err := decode[collectRequest](w, r)
 		if err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			writeDecodeError(w, err)
 			return
 		}
 		if req.VisitorID == "" || req.Path == "" {

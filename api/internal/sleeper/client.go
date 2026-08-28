@@ -45,6 +45,14 @@ const (
 	// bounded by the server's request timeout middleware, but non-request-scoped callers
 	// (e.g. grading with a long-lived context) have nothing else stopping a hang.
 	httpClientTimeout = 10 * time.Second
+
+	// rosterCacheMaxEntries and matchupCacheMaxEntries bound the in-memory caches keyed by
+	// caller-supplied league IDs. Without a cap, a third party driving traffic through
+	// distinct/random league IDs (see GH #13's rate-limiting rationale) could grow these
+	// maps without bound on a 1GB-RAM host. A few thousand entries comfortably covers every
+	// league this app is realistically mirroring at once.
+	rosterCacheMaxEntries  = 2000
+	matchupCacheMaxEntries = 2000
 )
 
 type roster struct {
@@ -75,6 +83,40 @@ type rosterCacheEntry struct {
 type matchupCacheEntry struct {
 	matchups  []provider.WeekMatchup
 	fetchedAt time.Time
+}
+
+// evictOldestRoster removes the least-recently-fetched entry from cache to make room for
+// a new one once rosterCacheMaxEntries is reached. Caller must hold rosterMu for writing.
+func evictOldestRoster(cache map[string]rosterCacheEntry) {
+	var oldestKey string
+	var oldestFetchedAt time.Time
+	first := true
+	for key, entry := range cache {
+		if first || entry.fetchedAt.Before(oldestFetchedAt) {
+			oldestKey, oldestFetchedAt = key, entry.fetchedAt
+			first = false
+		}
+	}
+	if !first {
+		delete(cache, oldestKey)
+	}
+}
+
+// evictOldestMatchup removes the least-recently-fetched entry from cache to make room for
+// a new one once matchupCacheMaxEntries is reached. Caller must hold matchupMu for writing.
+func evictOldestMatchup(cache map[string]matchupCacheEntry) {
+	var oldestKey string
+	var oldestFetchedAt time.Time
+	first := true
+	for key, entry := range cache {
+		if first || entry.fetchedAt.Before(oldestFetchedAt) {
+			oldestKey, oldestFetchedAt = key, entry.fetchedAt
+			first = false
+		}
+	}
+	if !first {
+		delete(cache, oldestKey)
+	}
 }
 
 type matchupEntry struct {
@@ -224,6 +266,9 @@ func (c *Client) GetRosters(ctx context.Context, leagueID string) ([]provider.Ro
 	// next time (GH #11).
 	if len(rosters) > 0 {
 		c.rosterMu.Lock()
+		if _, exists := c.rosterCache[leagueID]; !exists && len(c.rosterCache) >= rosterCacheMaxEntries {
+			evictOldestRoster(c.rosterCache)
+		}
 		c.rosterCache[leagueID] = rosterCacheEntry{rosters: rosters, fetchedAt: time.Now()}
 		c.rosterMu.Unlock()
 	}
@@ -330,6 +375,9 @@ func (c *Client) GetWeekMatchups(ctx context.Context, leagueID string, week int)
 	// up to matchupCacheTTLHistorical; re-check next call instead (GH #11).
 	if len(matchups) > 0 {
 		c.matchupMu.Lock()
+		if _, exists := c.matchupCache[cacheKey]; !exists && len(c.matchupCache) >= matchupCacheMaxEntries {
+			evictOldestMatchup(c.matchupCache)
+		}
 		c.matchupCache[cacheKey] = matchupCacheEntry{matchups: matchups, fetchedAt: time.Now()}
 		c.matchupMu.Unlock()
 	}
