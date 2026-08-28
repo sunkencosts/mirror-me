@@ -2399,6 +2399,203 @@ func TestGetPlayers(t *testing.T) {
 	}
 }
 
+// --- CSRF protection (GH #12) ---
+//
+// The auth cookie is SameSite=None; Secure in production (required by the split-origin
+// frontend/API setup), and the JSON decoder does not enforce Content-Type. Without the
+// origin check and Content-Type enforcement below, a cross-site "simple" request (a plain
+// <form> POST or navigator.sendBeacon) can carry the user's cookie without triggering a CORS
+// preflight. These tests exercise both halves of the fix against the four mutating POST
+// endpoints named in the issue: /lineups, /auth/merge, /league-bookmarks, /collect.
+//
+// newTestServer always sets FRONTEND_URL to "http://localhost:9999" (see the getenv switch
+// above), so that is the "same origin" value used below.
+
+const testFrontendOrigin = "http://localhost:9999"
+const testEvilOrigin = "http://evil.example"
+
+// csrfTestRequest builds a request with an optional Origin header, Bearer token, and
+// Content-Type override so tests can exercise the CSRF origin-check and Content-Type
+// enforcement independently. An empty contentType omits the header entirely.
+func csrfTestRequest(method, url, token, origin, contentType, body string) *http.Request {
+	req, _ := http.NewRequest(method, url, strings.NewReader(body))
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	if origin != "" {
+		req.Header.Set("Origin", origin)
+	}
+	return req
+}
+
+func TestCreateLineup_CrossOriginRejected(t *testing.T) {
+	baseURL := newTestServer(t, lineupSleeperHandler())
+	token := signTestJWT(testUserID, "csrf@example.com", "csrf_user")
+
+	body := `{"source":"sleeper","league_id":"test-league","roster_id":1,"week_number":1,"starters":["111","222"]}`
+	req := csrfTestRequest(http.MethodPost, baseURL+"/lineups", token, testEvilOrigin, "application/json", body)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403 for cross-origin request, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateLineup_SameOriginAllowed(t *testing.T) {
+	baseURL := newTestServer(t, lineupSleeperHandler())
+	token := signTestJWT(testUserID, "csrf@example.com", "csrf_user")
+
+	body := `{"source":"sleeper","league_id":"test-league","roster_id":1,"week_number":1,"starters":["111","222"]}`
+	req := csrfTestRequest(http.MethodPost, baseURL+"/lineups", token, testFrontendOrigin, "application/json", body)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Errorf("expected 201 for same-origin request, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateLineup_MissingContentTypeRejected(t *testing.T) {
+	baseURL := newTestServer(t, lineupSleeperHandler())
+	token := signTestJWT(testUserID, "csrf@example.com", "csrf_user")
+
+	body := `{"source":"sleeper","league_id":"test-league","roster_id":1,"week_number":1,"starters":["111","222"]}`
+	req := csrfTestRequest(http.MethodPost, baseURL+"/lineups", token, "", "text/plain", body)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnsupportedMediaType {
+		t.Errorf("expected 415 for non-JSON Content-Type, got %d", resp.StatusCode)
+	}
+}
+
+func TestMerge_CrossOriginRejected(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+	token := signTestJWT(testUserID, "csrf@example.com", "csrf_user")
+
+	body := `{"anonymous_id":"00000000-0000-0000-0000-000000000123"}`
+	req := csrfTestRequest(http.MethodPost, baseURL+"/auth/merge", token, testEvilOrigin, "application/json", body)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403 for cross-origin request, got %d", resp.StatusCode)
+	}
+}
+
+func TestMerge_WrongContentTypeRejected(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+	token := signTestJWT(testUserID, "csrf@example.com", "csrf_user")
+
+	body := `{"anonymous_id":"00000000-0000-0000-0000-000000000123"}`
+	req := csrfTestRequest(http.MethodPost, baseURL+"/auth/merge", token, "", "text/plain", body)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnsupportedMediaType {
+		t.Errorf("expected 415 for non-JSON Content-Type, got %d", resp.StatusCode)
+	}
+}
+
+func TestSaveUserLeague_CrossOriginRejected(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+
+	body := `{"user_id":"user-a","league_id":"league-1","source":"sleeper","label":"My League"}`
+	req := csrfTestRequest(http.MethodPost, baseURL+"/league-bookmarks", "", testEvilOrigin, "application/json", body)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403 for cross-origin request, got %d", resp.StatusCode)
+	}
+}
+
+func TestSaveUserLeague_WrongContentTypeRejected(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+
+	body := `{"user_id":"user-a","league_id":"league-1","source":"sleeper","label":"My League"}`
+	req := csrfTestRequest(http.MethodPost, baseURL+"/league-bookmarks", "", "", "text/plain", body)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnsupportedMediaType {
+		t.Errorf("expected 415 for non-JSON Content-Type, got %d", resp.StatusCode)
+	}
+}
+
+func TestCollect_Succeeds(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+
+	body := `{"path":"/","referrer":"","visitor_id":"00000000-0000-0000-0000-000000000456"}`
+	req := csrfTestRequest(http.MethodPost, baseURL+"/collect", "", "", "application/json", body)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		t.Errorf("expected 204, got %d", resp.StatusCode)
+	}
+}
+
+func TestCollect_CrossOriginRejected(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+
+	body := `{"path":"/","referrer":"","visitor_id":"00000000-0000-0000-0000-000000000456"}`
+	req := csrfTestRequest(http.MethodPost, baseURL+"/collect", "", testEvilOrigin, "application/json", body)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403 for cross-origin request, got %d", resp.StatusCode)
+	}
+}
+
+func TestCollect_WrongContentTypeRejected(t *testing.T) {
+	baseURL := newTestServer(t, noopHandler())
+
+	body := `{"path":"/","referrer":"","visitor_id":"00000000-0000-0000-0000-000000000456"}`
+	req := csrfTestRequest(http.MethodPost, baseURL+"/collect", "", "", "text/plain", body)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnsupportedMediaType {
+		t.Errorf("expected 415 for non-JSON Content-Type, got %d", resp.StatusCode)
+	}
+}
+
 func TestUnmatchedRoute_Returns404JSON(t *testing.T) {
 	baseURL := newTestServer(t, noopHandler())
 
